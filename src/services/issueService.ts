@@ -6,38 +6,62 @@ import {
   saveResources,
 } from '../storage/localStorage';
 
+function isPastReturnDate(returnDate?: string) {
+  if (!returnDate) return false;
+
+  const parsed = new Date(returnDate);
+  if (Number.isNaN(parsed.getTime())) return false;
+
+  const endOfReturnDay = new Date(parsed);
+  endOfReturnDay.setHours(23, 59, 59, 999);
+
+  return endOfReturnDay.getTime() < Date.now();
+}
+
 export function getAllIssues(): Issue[] {
   return getIssues();
+}
+
+export function syncOverdueIssues(): Issue[] {
+  const issues = getIssues();
+  let changed = false;
+
+  const updatedIssues = issues.map((issue) => {
+    if (
+      issue.status === 'Issued' &&
+      issue.returnable &&
+      isPastReturnDate(issue.returnDate)
+    ) {
+      changed = true;
+      return { ...issue, status: 'Overdue' as const };
+    }
+
+    return issue;
+  });
+
+  if (changed) saveIssues(updatedIssues);
+
+  return updatedIssues;
 }
 
 export function createIssue(issue: Issue): Issue[] {
   const issues = getIssues();
   const resources = getResources();
-
   const updatedIssues = [...issues, issue];
 
-  const updatedResources: Resource[] = resources.map(
-    (resource): Resource => {
-      if (resource.id !== issue.resourceId) {
-        return resource;
-      }
+  const updatedResources: Resource[] = resources.map((resource): Resource => {
+    if (resource.id !== issue.resourceId) return resource;
 
-      const newQuantity = Math.max(0, resource.quantity - 1);
+    const newQuantity = Math.max(0, resource.quantity - 1);
+    const newStatus: ResourceStatus =
+      newQuantity === 0
+        ? 'Unavailable'
+        : newQuantity <= 3
+          ? 'Low stock'
+          : 'Available';
 
-      const newStatus: ResourceStatus =
-        newQuantity === 0
-          ? 'Unavailable'
-          : newQuantity <= 3
-            ? 'Low stock'
-            : 'Available';
-
-      return {
-        ...resource,
-        quantity: newQuantity,
-        status: newStatus,
-      };
-    }
-  );
+    return { ...resource, quantity: newQuantity, status: newStatus };
+  });
 
   saveIssues(updatedIssues);
   saveResources(updatedResources);
@@ -48,12 +72,9 @@ export function createIssue(issue: Issue): Issue[] {
 export function returnIssue(issueId: string): Issue[] {
   const issues = getIssues();
   const resources = getResources();
-
   const issue = issues.find((item) => item.id === issueId);
 
-  if (!issue || issue.status === 'Returned') {
-    return issues;
-  }
+  if (!issue || issue.status === 'Returned') return issues;
 
   const updatedIssues = issues.map((item) =>
     item.id === issueId
@@ -65,15 +86,14 @@ export function returnIssue(issueId: string): Issue[] {
       : item
   );
 
-  const updatedResources: Resource[] = resources.map(
-    (resource): Resource =>
-      resource.id === issue.resourceId
-        ? {
-            ...resource,
-            quantity: resource.quantity + 1,
-            status: 'Available',
-          }
-        : resource
+  const updatedResources: Resource[] = resources.map((resource): Resource =>
+    resource.id === issue.resourceId
+      ? {
+          ...resource,
+          quantity: resource.quantity + 1,
+          status: 'Available',
+        }
+      : resource
   );
 
   saveIssues(updatedIssues);

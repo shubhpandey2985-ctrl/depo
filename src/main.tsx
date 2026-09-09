@@ -1,48 +1,82 @@
 /// <reference types="vite/client" />
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import './styles.css';
+
 import {
+  Activity,
+  ArrowRight,
+  ArrowUpRight,
+  BarChart3,
   Bell,
   Box,
+  Boxes,
+  Check,
   ChevronRight,
+  CircleAlert,
   CirclePlus,
+  ClipboardList,
   Clock3,
   Command,
   Cpu,
+  Edit3,
+  FileText,
+  Filter,
+  History as HistoryIcon,
   LayoutDashboard,
+  LogOut,
   Menu,
+  Package,
   PackageOpen,
+  Plus,
   Search,
+  Settings,
   Sparkles,
+  Trash2,
   Users,
   X,
+  GraduationCap,
+  ShieldCheck,
 } from 'lucide-react';
 
-import './styles.css';
-
-import type { Resource } from './types';
-
-import {
-  getCurrentUser,
-  logout,
-} from './services/authService';
-
 import Login from './pages/login';
+
+import type {
+  Resource,
+  Issue,
+  User,
+  Profession,
+  Role,
+  Category,
+} from './types';
 
 import {
   initializeResources,
   addResource,
+  updateResource,
   getAllResources,
 } from './services/resourceService';
-
-import { initializeUsers } from './services/userService';
 
 import {
   createIssue,
   getAllIssues,
   returnIssue,
+  syncOverdueIssues,
 } from './services/issueService';
+
+import {
+  getCurrentUser,
+  logout,
+  type AuthUser,
+} from './services/authService';
+
+import {
+  getUsers,
+  saveUsers,
+  getResources,
+  saveResources,
+} from './storage/localStorage';
 
 const nav = [
   { label: 'Overview', icon: LayoutDashboard },
@@ -53,6 +87,7 @@ const nav = [
   { label: 'Insights', icon: Sparkles },
 ];
 
+
 function Brand() {
   return (
     <div className="brand">
@@ -62,11 +97,35 @@ function Brand() {
   );
 }
 
+function initializeUsers(): User[] {
+  const users = getUsers();
+
+  if (users.length === 0) {
+    const defaultUsers: User[] = [
+      {
+        id: 'USR-001',
+        name: 'Admin',
+        profession: 'Staff',
+        role: 'Admin',
+      },
+    ];
+
+    saveUsers(defaultUsers);
+
+    return defaultUsers;
+  }
+
+  return users;
+}
+
+
 function App() {
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
+
   const [role, setRole] = useState<'Admin' | 'User'>(
-  currentUser?.role || 'User'
-);
+    currentUser?.role || 'User'
+  );
+
 
   const pageMap: Record<string, string> = {
     overview: 'Overview',
@@ -78,41 +137,72 @@ function App() {
     'add-resource': 'Add resource',
   };
 
+
   const [page, setPage] = useState(() => {
-    const hash = window.location.hash.replace('#', '').toLowerCase();
+    const hash = window.location.hash
+      .replace('#', '')
+      .toLowerCase();
+
     return pageMap[hash] || 'Overview';
   });
 
+
   const [profileOpen, setProfileOpen] = useState(false);
+
+  const [editingResource, setEditingResource] =
+    useState<Resource | null>(null);
+
 
   const [resources, setResources] = useState<Resource[]>(() =>
     initializeResources()
   );
 
+
   const [query, setQuery] = useState('');
+
   const [cat, setCat] = useState('All');
 
-  const [selected, setSelected] = useState<Resource | null>(null);
+  const [selected, setSelected] =
+    useState<Resource | null>(null);
 
   const [menu, setMenu] = useState(false);
 
   const [toast, setToast] = useState('');
+
+
+  // =========================================================
+  // ISSUE STATE
+  // =========================================================
 
   const [issue, setIssue] = useState({
     name: '',
     profession: 'Student',
     returnable: true,
     date: '20 Sep 2026',
+    quantity: 1,
   });
+
+
+  // =========================================================
+  // BROWSER NAVIGATION
+  // =========================================================
 
   useEffect(() => {
     const handlePopState = () => {
-      const hash = window.location.hash.replace('#', '').toLowerCase();
+      const hash = window.location.hash
+        .replace('#', '')
+        .toLowerCase();
+
       setPage(pageMap[hash] || 'Overview');
       setSelected(null);
     };
 
-    window.addEventListener('popstate', handlePopState);
+
+    window.addEventListener(
+      'popstate',
+      handlePopState
+    );
+
 
     if (!window.location.hash) {
       window.history.replaceState(
@@ -122,29 +212,68 @@ function App() {
       );
     }
 
+
     return () => {
-      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener(
+        'popstate',
+        handlePopState
+      );
     };
   }, []);
 
-  // Initialize demo users whenever a user is logged in.
+
+  // =========================================================
+  // INITIALIZE USERS
+  // =========================================================
+
   useEffect(() => {
     if (currentUser) {
       initializeUsers();
     }
   }, [currentUser]);
 
-  // IMPORTANT: keep this hook above the login conditional so the hook
-  // order never changes when logging in or logging out.
+
+  // =========================================================
+  // OVERDUE SYNC
+  // =========================================================
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    syncOverdueIssues();
+
+
+    const interval = window.setInterval(() => {
+      syncOverdueIssues();
+    }, 60 * 1000);
+
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [currentUser]);
+
+
+  // =========================================================
+  // FILTERED INVENTORY
+  // =========================================================
+
   const filtered = useMemo(
     () =>
       resources.filter(
         (r) =>
           (cat === 'All' || r.category === cat) &&
-          r.name.toLowerCase().includes(query.toLowerCase())
+          r.name
+            .toLowerCase()
+            .includes(query.toLowerCase())
       ),
     [resources, cat, query]
   );
+
+
+  // =========================================================
+  // LOGIN
+  // =========================================================
 
   if (!currentUser) {
     return (
@@ -154,6 +283,7 @@ function App() {
           setRole(user.role);
           setProfileOpen(false);
           setPage('Overview');
+
           window.history.replaceState(
             { page: 'Overview' },
             '',
@@ -164,6 +294,11 @@ function App() {
     );
   }
 
+
+  // =========================================================
+  // NOTIFICATION
+  // =========================================================
+
   const notify = (message: string) => {
     setToast(message);
 
@@ -172,13 +307,22 @@ function App() {
     }, 2800);
   };
 
+
+  // =========================================================
+  // NAVIGATION
+  // =========================================================
+
   const go = (p: string) => {
     setPage(p);
+
     setMenu(false);
     setProfileOpen(false);
     setSelected(null);
 
-    const hash = p.replace(/ /g, '-').toLowerCase();
+    const hash = p
+      .replace(/ /g, '-')
+      .toLowerCase();
+
 
     if (window.location.hash !== `#${hash}`) {
       window.history.pushState(
@@ -189,12 +333,19 @@ function App() {
     }
   };
 
+
+  // =========================================================
+  // LOGOUT
+  // =========================================================
+
   const handleLogout = () => {
     logout();
+
     setProfileOpen(false);
     setMenu(false);
     setSelected(null);
     setCurrentUser(null);
+
 
     window.history.replaceState(
       { page: 'Login' },
@@ -203,49 +354,312 @@ function App() {
     );
   };
 
-  // =========================
-  // ADD RESOURCE
-  // =========================
 
-  const addItem = () => {
+  // =========================================================
+  // ADD RESOURCE
+  // =========================================================
+
+  const addItem = (data: {
+    name: string;
+    category: 'Hardware' | 'Software';
+    quantity: number;
+    location: string;
+  }) => {
+
+    const cleanName = data.name.trim();
+
+    const cleanLocation =
+      data.location.trim();
+
+
+    if (!cleanName) {
+      notify('Enter a resource name');
+      return;
+    }
+
+
+    if (
+      !Number.isInteger(data.quantity) ||
+      data.quantity <= 0
+    ) {
+      notify('Quantity must be at least 1');
+      return;
+    }
+
+
+    const nextNumber =
+      resources.reduce(
+        (max, resource) => {
+          const number = Number(
+            resource.id.replace('RES-', '')
+          );
+
+          return Number.isFinite(number)
+            ? Math.max(max, number)
+            : max;
+        },
+        0
+      ) + 1;
+
+
     const item: Resource = {
-      id: `RES-${String(resources.length + 7).padStart(3, '0')}`,
-      name: 'ESP32 Dev Board',
-      category: 'Hardware',
-      sub: 'Development boards',
-      quantity: 8,
-      status: 'Available',
-      tone: 'blue',
-      location: 'Lab 204 · Shelf C',
+      id: `RES-${String(nextNumber).padStart(3, '0')}`,
+
+      name: cleanName,
+
+      category: data.category,
+
+      sub:
+        data.category === 'Hardware'
+          ? 'Hardware resource'
+          : 'Software resource',
+
+      quantity: data.quantity,
+
+      status:
+        data.quantity <= 3
+          ? 'Low stock'
+          : 'Available',
+
+      tone:
+        data.category === 'Hardware'
+          ? 'blue'
+          : 'purple',
+
+      location:
+        cleanLocation || 'Innovation Centre',
     };
+
 
     const updated = addResource(item);
 
     setResources(updated);
 
-    notify('ESP32 Dev Board added to inventory');
+    notify(`${cleanName} added to inventory`);
 
     go('Inventory');
   };
 
-  // =========================
+
+  // =========================================================
+  // DELETE RESOURCE
+  // =========================================================
+
+  const deleteItem = (resource: Resource) => {
+
+    if (role !== 'Admin') {
+      notify('Only Admin can delete resources');
+      return;
+    }
+
+
+    const issues = getAllIssues();
+
+
+    const hasActiveIssue = issues.some(
+      (item) =>
+        item.resourceId === resource.id &&
+        item.status !== 'Returned'
+    );
+
+
+    if (hasActiveIssue) {
+      notify(
+        'Cannot delete a resource that is currently issued'
+      );
+
+      return;
+    }
+
+
+    const confirmed = window.confirm(
+      `Delete "${resource.name}" from inventory?`
+    );
+
+
+    if (!confirmed) {
+      return;
+    }
+
+
+    const updatedResources =
+      getResources().filter(
+        (item) => item.id !== resource.id
+      );
+
+
+    saveResources(updatedResources);
+
+    setResources(updatedResources);
+
+
+    if (selected?.id === resource.id) {
+      setSelected(null);
+    }
+
+
+    notify(
+      `${resource.name} deleted from inventory`
+    );
+  };
+
+
+  // =========================================================
+  // EDIT RESOURCE
+  // =========================================================
+
+  const editItem = (resource: Resource) => {
+
+    if (role !== 'Admin') {
+      notify('Only Admin can edit resources');
+      return;
+    }
+
+
+    setSelected(null);
+
+    setEditingResource(resource);
+  };
+
+
+  const saveEditedResource = (data: {
+    name: string;
+    category: 'Hardware' | 'Software';
+    quantity: number;
+    location: string;
+  }) => {
+
+    if (!editingResource) return;
+
+
+    const cleanName = data.name.trim();
+
+    const cleanLocation =
+      data.location.trim();
+
+
+    if (!cleanName) {
+      notify('Enter a resource name');
+      return;
+    }
+
+
+    if (
+      !Number.isInteger(data.quantity) ||
+      data.quantity <= 0
+    ) {
+      notify('Quantity must be at least 1');
+      return;
+    }
+
+
+    const updatedResources =
+      getResources().map((resource) =>
+        resource.id === editingResource.id
+          ? {
+              ...resource,
+
+              name: cleanName,
+
+              category: data.category,
+
+              quantity: data.quantity,
+
+              status:
+                data.quantity <= 3
+                  ? 'Low stock' as const
+                  : 'Available' as const,
+
+              tone:
+                data.category === 'Hardware'
+                  ? 'blue'
+                  : 'purple',
+
+              sub:
+                data.category === 'Hardware'
+                  ? 'Hardware resource'
+                  : 'Software resource',
+
+              location:
+                cleanLocation ||
+                'Innovation Centre',
+            }
+          : resource
+      );
+
+
+    saveResources(updatedResources);
+
+    setResources(updatedResources);
+
+
+    if (
+      selected?.id === editingResource.id
+    ) {
+      setSelected(
+        updatedResources.find(
+          (r) =>
+            r.id === editingResource.id
+        ) || null
+      );
+    }
+
+
+    setEditingResource(null);
+
+    notify(
+      `${cleanName} updated successfully`
+    );
+  };
+
+
+  // =========================================================
   // ISSUE RESOURCE
-  // =========================
+  // =========================================================
 
   const completeIssue = () => {
+
     if (!selected) {
-      return notify('Select a resource first');
+      return notify(
+        'Select a resource first'
+      );
     }
+
 
     if (!issue.name.trim()) {
-      return notify('Add a recipient name to continue');
+      return notify(
+        'Add a recipient name to continue'
+      );
     }
+
 
     if (selected.quantity <= 0) {
-      return notify('This resource is currently unavailable');
+      return notify(
+        'This resource is currently unavailable'
+      );
     }
 
-    const newIssue = {
+
+    // =======================================================
+    // QUANTITY VALIDATION
+    // =======================================================
+
+    if (
+      !Number.isInteger(issue.quantity) ||
+      issue.quantity < 1 ||
+      issue.quantity > selected.quantity
+    ) {
+      return notify(
+        'Choose a valid quantity'
+      );
+    }
+
+
+    // =======================================================
+    // CREATE ISSUE RECORD
+    // =======================================================
+
+    const newIssue: Issue = {
       id: `ISS-${Date.now()}`,
 
       resourceId: selected.id,
@@ -256,18 +670,14 @@ function App() {
 
       userName: issue.name,
 
-      profession: issue.profession as
-        | 'Student'
-        | 'Teacher'
-        | 'Staff'
-        | 'Researcher'
-        | 'Project Member'
-        | 'Other',
+      profession:
+        issue.profession as Issue['profession'],
 
-      // REAL DATE + TIME
-      issuedAt: new Date().toISOString(),
+      issuedAt:
+        new Date().toISOString(),
 
-      returnable: issue.returnable,
+      returnable:
+        issue.returnable,
 
       ...(issue.returnable
         ? {
@@ -275,31 +685,65 @@ function App() {
           }
         : {}),
 
-      status: 'Issued' as const,
+      status: 'Issued',
+
+      // NEW
+      quantity: issue.quantity,
     };
 
-    createIssue(newIssue);
 
-    const updatedResources = getAllResources();
+    // =======================================================
+    // SAVE ISSUE + UPDATE INVENTORY
+    // =======================================================
+
+    const updatedIssues =
+      createIssue(newIssue);
+
+
+    // Refresh issue state isn't required
+    // because History reads from storage.
+
+
+    const updatedResources =
+      getAllResources();
+
 
     setResources(updatedResources);
 
-    notify(`${selected.name} issued to ${issue.name}`);
+
+    notify(
+      `${issue.quantity} × ${selected.name} issued to ${issue.name}`
+    );
+
 
     setSelected(null);
+
+
+    // Reset issue form
+    setIssue({
+      name: '',
+      profession: 'Student',
+      returnable: true,
+      date: '20 Sep 2026',
+      quantity: 1,
+    });
+
 
     go('History');
   };
 
+
   return (
     <div className="app">
 
-      {/* =========================
+      {/* =====================================================
           HEADER
-      ========================= */}
+      ===================================================== */}
 
       <header>
+
         <Brand />
+
 
         <button
           className="mobile-menu"
@@ -309,49 +753,88 @@ function App() {
           {menu ? <X /> : <Menu />}
         </button>
 
+
         <nav className={menu ? 'open' : ''}>
+
           {nav
-            .slice(0, currentUser.role === 'User' ? 4 : nav.length)
-            .map(({ label, icon: Icon }) => (
-              <button
-                key={label}
-                className={page === label ? 'active' : ''}
-                onClick={() => go(label)}
-              >
-                <Icon /> {label}
-              </button>
-            ))}
+            .slice(
+              0,
+              currentUser.role === 'User'
+                ? 4
+                : nav.length
+            )
+            .map(
+              ({
+                label,
+                icon: Icon,
+              }) => (
+                <button
+                  key={label}
+                  className={
+                    page === label
+                      ? 'active'
+                      : ''
+                  }
+                  onClick={() =>
+                    go(label)
+                  }
+                >
+                  <Icon />
+                  {label}
+                </button>
+              )
+            )}
+
         </nav>
+
 
         <div className="tools">
 
           <div className="search">
+
             <Search />
 
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) =>
+                setQuery(e.target.value)
+              }
               placeholder="Search resources, people…"
             />
 
             <Command />
+
           </div>
+
 
           <button className="icon">
             <Bell />
           </button>
 
-          <div style={{ position: 'relative' }}>
+
+          <div
+            style={{
+              position: 'relative',
+            }}
+          >
+
             <button
               className="avatar"
-              onClick={() => setProfileOpen(!profileOpen)}
+              onClick={() =>
+                setProfileOpen(
+                  !profileOpen
+                )
+              }
               title="Account menu"
               aria-label="Account menu"
             >
-              {currentUser.name[0].toUpperCase()}
+              {currentUser.name[0]
+                .toUpperCase()}
             </button>
 
+
             {profileOpen && (
+
               <div
                 style={{
                   position: 'absolute',
@@ -359,19 +842,25 @@ function App() {
                   right: 0,
                   width: '220px',
                   background: '#fff',
-                  border: '1px solid #e7e9f1',
+                  border:
+                    '1px solid #e7e9f1',
                   borderRadius: '14px',
                   padding: '12px',
-                  boxShadow: '0 16px 40px rgba(35, 42, 75, 0.14)',
+                  boxShadow:
+                    '0 16px 40px rgba(35, 42, 75, 0.14)',
                   zIndex: 1000,
                 }}
               >
+
                 <div
                   style={{
-                    padding: '8px 10px 12px',
-                    borderBottom: '1px solid #edf0f5',
+                    padding:
+                      '8px 10px 12px',
+                    borderBottom:
+                      '1px solid #edf0f5',
                   }}
                 >
+
                   <strong
                     style={{
                       display: 'block',
@@ -381,6 +870,7 @@ function App() {
                   >
                     {currentUser.name}
                   </strong>
+
 
                   <span
                     style={{
@@ -393,12 +883,15 @@ function App() {
                     {currentUser.email}
                   </span>
 
+
                   <span
                     style={{
-                      display: 'inline-block',
+                      display:
+                        'inline-block',
                       marginTop: '8px',
                       padding: '4px 8px',
-                      borderRadius: '999px',
+                      borderRadius:
+                        '999px',
                       background: '#f0efff',
                       color: '#665fd8',
                       fontSize: '11px',
@@ -407,7 +900,9 @@ function App() {
                   >
                     {currentUser.role}
                   </span>
+
                 </div>
+
 
                 <button
                   type="button"
@@ -418,7 +913,8 @@ function App() {
                     padding: '10px',
                     border: 'none',
                     borderRadius: '9px',
-                    background: 'transparent',
+                    background:
+                      'transparent',
                     color: '#c54a4a',
                     textAlign: 'left',
                     cursor: 'pointer',
@@ -428,30 +924,38 @@ function App() {
                 >
                   Logout
                 </button>
+
               </div>
+
             )}
+
           </div>
 
         </div>
+
       </header>
+
 
       <main>
 
-        {/* =========================
+        {/* ===================================================
             OVERVIEW
-        ========================= */}
+        =================================================== */}
 
         {page === 'Overview' && (
           <Overview
             role={role}
             go={go}
             setSelected={setSelected}
+            resources={resources}
+            issues={getAllIssues()}
           />
         )}
 
-        {/* =========================
+
+        {/* ===================================================
             INVENTORY
-        ========================= */}
+        =================================================== */}
 
         {page === 'Inventory' && (
           <Inventory
@@ -462,12 +966,16 @@ function App() {
             setCat={setCat}
             setSelected={setSelected}
             go={go}
+            role={role}
+            onDelete={deleteItem}
+            onEdit={editItem}
           />
         )}
 
-        {/* =========================
+
+        {/* ===================================================
             ISSUE RESOURCE
-        ========================= */}
+        =================================================== */}
 
         {page === 'Issue resource' && (
           <Issue
@@ -480,31 +988,44 @@ function App() {
           />
         )}
 
-        {/* =========================
+
+        {/* ===================================================
             HISTORY
-        ========================= */}
+        =================================================== */}
 
         {page === 'History' && (
           <History
-            onResourcesChange={setResources}
+            onResourcesChange={
+              setResources
+            }
           />
         )}
 
-        {/* =========================
+
+        {/* ===================================================
             PEOPLE
-        ========================= */}
+        =================================================== */}
 
-        {page === 'People' && <People />}
+        {page === 'People' && (
+          <People />
+        )}
 
-        {/* =========================
+
+        {/* ===================================================
             INSIGHTS
-        ========================= */}
+        =================================================== */}
 
-        {page === 'Insights' && <Insights />}
+        {page === 'Insights' && (
+          <Insights
+  resources={resources}
+  issues={getAllIssues()}
+/>
+        )}
 
-        {/* =========================
+
+        {/* ===================================================
             ADD RESOURCE
-        ========================= */}
+        =================================================== */}
 
         {page === 'Add resource' && (
           <AddResource
@@ -513,19 +1034,43 @@ function App() {
           />
         )}
 
-        {/* =========================
-            RESOURCE DETAILS
-        ========================= */}
 
-        {selected && page !== 'Issue resource' && (
-          <Details
-            resource={selected}
-            onIssue={() => go('Issue resource')}
-            onClose={() => setSelected(null)}
+        {/* ===================================================
+            RESOURCE DETAILS
+        =================================================== */}
+
+        {selected &&
+          page !== 'Issue resource' && (
+            <Details
+              resource={selected}
+              onIssue={() =>
+                go('Issue resource')
+              }
+              onClose={() =>
+                setSelected(null)
+              }
+            />
+          )}
+
+
+        {/* ===================================================
+            EDIT RESOURCE
+        =================================================== */}
+
+        {editingResource && (
+          <EditResource
+            resource={editingResource}
+            onSave={
+              saveEditedResource
+            }
+            onClose={() =>
+              setEditingResource(null)
+            }
           />
         )}
 
       </main>
+
 
       {toast && (
         <div className="toast">
@@ -537,7 +1082,6 @@ function App() {
   );
 }
 
-
 /* =========================================================
    OVERVIEW
 ========================================================= */
@@ -546,12 +1090,17 @@ function Overview({
   role,
   go,
   setSelected,
+  resources,
+  issues,
 }: {
   role: string;
   go: (x: string) => void;
   setSelected: (r: Resource) => void;
+  resources: Resource[];
+  issues: ReturnType<typeof getAllIssues>;
 }) {
   const currentHour = new Date().getHours();
+
 
   const greeting =
     currentHour >= 4 && currentHour < 12
@@ -562,16 +1111,166 @@ function Overview({
           ? 'Good evening, Admin.'
           : 'Good night, Admin.';
 
+
+  // Total quantity currently available
+  const availableNow = resources.reduce(
+    (sum, resource) =>
+      sum + resource.quantity,
+    0
+  );
+
+
+  // Total quantity currently issued
+  const issuedCount = issues
+    .filter(
+      (issue) =>
+        issue.status === 'Issued' ||
+        issue.status === 'Overdue'
+    )
+    .reduce(
+      (sum, issue) =>
+        sum + (issue.quantity || 1),
+      0
+    );
+
+
+  const totalItems =
+    availableNow + issuedCount;
+
+
+  const todayKey =
+    new Date().toDateString();
+
+
+  // Total quantity issued today
+  const issuedToday = issues
+    .filter(
+      (issue) =>
+        new Date(
+          issue.issuedAt
+        ).toDateString() === todayKey
+    )
+    .reduce(
+      (sum, issue) =>
+        sum + (issue.quantity || 1),
+      0
+    );
+
+
+  const lowStockCount =
+    resources.filter(
+      (resource) =>
+        resource.status === 'Low stock'
+    ).length;
+
+
+  const overdueCount =
+    issues.filter(
+      (issue) =>
+        issue.status === 'Overdue'
+    ).reduce(
+      (sum, issue) =>
+        sum + (issue.quantity || 1),
+      0
+    );
+
+
+  const attentionCount =
+    lowStockCount + overdueCount;
+
+
+  const weekAgo =
+    Date.now() -
+    7 * 24 * 60 * 60 * 1000;
+
+
+  const movedThisWeek =
+    issues
+      .filter(
+        (issue) =>
+          new Date(
+            issue.issuedAt
+          ).getTime() >= weekAgo ||
+          (
+            issue.returnedAt &&
+            new Date(
+              issue.returnedAt
+            ).getTime() >= weekAgo
+          )
+      )
+      .reduce(
+        (sum, issue) =>
+          sum + (issue.quantity || 1),
+        0
+      );
+
+
+  const categoryCounts =
+    resources.reduce(
+      (acc, resource) => {
+        acc[resource.category] =
+          (acc[resource.category] || 0) +
+          resource.quantity;
+
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+
+
+  const recentIssues =
+    [...issues]
+      .sort(
+        (a, b) =>
+          new Date(
+            b.issuedAt
+          ).getTime() -
+          new Date(
+            a.issuedAt
+          ).getTime()
+      )
+      .slice(0, 3);
+
+
+  const upcomingReturns =
+    [...issues]
+      .filter(
+        (issue) =>
+          (
+            issue.status === 'Issued' ||
+            issue.status === 'Overdue'
+          ) &&
+          issue.returnable &&
+          issue.returnDate
+      )
+      .sort(
+        (a, b) =>
+          new Date(
+            a.returnDate!
+          ).getTime() -
+          new Date(
+            b.returnDate!
+          ).getTime()
+      )
+      .slice(0, 2);
+
+
   return (
     <>
+      {/* =====================================================
+          HERO
+      ===================================================== */}
+
       <section className="hero">
 
         <div>
+
           <p className="eyebrow">
             {role === 'Admin'
-              ? 'MONDAY · 09 SEPTEMBER'
+              ? 'RESOURCE OVERVIEW'
               : 'YOUR WORKSPACE'}
           </p>
+
 
           <h1>
             {role === 'Admin'
@@ -579,22 +1278,32 @@ function Overview({
               : 'Your resources.'}
           </h1>
 
+
           <p className="lede">
             {role === 'Admin'
               ? "Here's what is happening across your project resources."
               : 'Everything currently assigned to you, in one place.'}
           </p>
+
         </div>
+
 
         <div className="pulse">
 
-          <span>ACTIVITY PULSE</span>
+          <span>
+            ACTIVITY PULSE
+          </span>
 
-          <strong>18</strong>
+
+          <strong>
+            {movedThisWeek}
+          </strong>
+
 
           <p>
-            items moved this week <b>↗ 12%</b>
+            items moved this week
           </p>
+
 
           <div className="pulse-line">
             <i />
@@ -610,158 +1319,339 @@ function Overview({
 
       </section>
 
+
+      {/* =====================================================
+          METRICS
+      ===================================================== */}
+
       <section className="metrics">
 
         <article>
-          <b>124</b>
+          <b>{totalItems}</b>
           <span>Total items</span>
         </article>
 
+
         <article>
-          <b>36</b>
+          <b>{availableNow}</b>
           <span>Available now</span>
         </article>
 
+
         <article>
-          <b>8</b>
+          <b>{issuedToday}</b>
           <span>Issued today</span>
         </article>
 
+
         <article className="alert">
-          <b>3</b>
+          <b>{attentionCount}</b>
           <span>Need attention</span>
         </article>
 
       </section>
 
+
+      {/* =====================================================
+          RESOURCE COLLECTIONS
+      ===================================================== */}
+
       <section className="section-title">
 
         <div>
-          <p className="eyebrow">DISCOVER</p>
-          <h2>New collections</h2>
+
+          <p className="eyebrow">
+            DISCOVER
+          </p>
+
+          <h2>
+            Resource collections
+          </h2>
+
         </div>
+
 
         <button
           className="text-btn"
-          onClick={() => go('Inventory')}
+          onClick={() =>
+            go('Inventory')
+          }
         >
-          View inventory <ChevronRight />
+          View inventory
+          <ChevronRight />
         </button>
 
       </section>
 
+
       <section className="collections">
 
         {[
-          ['Laptops &\naccessories', '12 items', 'laptop'],
-          ['Development\ntools', '16 items', 'code'],
-          ['Electronics', '24 items', 'chip'],
-          ['Tools &\nequipment', '16 items', 'tool'],
-        ].map(([n, c, i]) => (
-          <button
-            key={n}
-            className={`collection ${i}`}
-            onClick={() => go('Inventory')}
-          >
+          [
+            'Hardware',
+            `${categoryCounts.Hardware || 0} items`,
+            'chip',
+          ],
 
-            <span>
-              {i === 'chip' ? (
-                <Cpu />
-              ) : i === 'tool' ? (
-                <PackageOpen />
-              ) : (
-                <Box />
-              )}
-            </span>
+          [
+            'Software',
+            `${categoryCounts.Software || 0} items`,
+            'code',
+          ],
 
-            <h3>{n}</h3>
+          [
+            'Low stock',
+            `${lowStockCount} items`,
+            'tool',
+          ],
 
-            <p>{c}</p>
+          [
+            'Issued',
+            `${issuedCount} items`,
+            'laptop',
+          ],
+        ].map(
+          ([name, count, icon]) => (
 
-            <ChevronRight />
+            <button
+              key={name}
+              className={`collection ${icon}`}
+              onClick={() =>
+                go('Inventory')
+              }
+            >
 
-          </button>
-        ))}
+              <span>
+
+                {icon === 'chip' ? (
+                  <Cpu />
+                ) : icon === 'tool' ? (
+                  <PackageOpen />
+                ) : (
+                  <Box />
+                )}
+
+              </span>
+
+
+              <h3>
+                {name}
+              </h3>
+
+
+              <p>
+                {count}
+              </p>
+
+
+              <ChevronRight />
+
+            </button>
+
+          )
+        )}
 
       </section>
 
+
+      {/* =====================================================
+          LOWER SECTION
+      ===================================================== */}
+
       <section className="lower">
+
+        {/* ===================================================
+            RECENT ACTIVITY
+        =================================================== */}
 
         <article className="activity">
 
-          <p className="eyebrow">LIVE LOG</p>
+          <p className="eyebrow">
+            LIVE LOG
+          </p>
 
-          <h2>Activity pulse</h2>
 
-          {[
-            'Raspberry Pi 5 issued to Rohan Gupta',
-            'Arduino Uno returned to shelf B',
-            'New Toolkit Set added to tools',
-          ].map((a, i) => (
-            <div
-              className="event"
-              key={a}
-            >
+          <h2>
+            Recent activity
+          </h2>
 
-              <i className={`dot d${i}`} />
+
+          {recentIssues.length === 0 ? (
+
+            <div className="event">
+
+              <i className="dot d0" />
 
               <span>
-                {a}
-                <small>{i + 1}h ago</small>
+                No resource activity yet.
+
+                <small>
+                  Start by issuing a resource.
+                </small>
               </span>
 
             </div>
-          ))}
+
+          ) : (
+
+            recentIssues.map(
+              (item, index) => (
+
+                <div
+                  className="event"
+                  key={item.id}
+                >
+
+                  <i
+                    className={`dot d${index}`}
+                  />
+
+
+                  <span>
+
+                    {item.status ===
+                    'Returned'
+                      ? `${item.resourceName} returned by ${item.userName}`
+                      : `${item.resourceName} issued to ${item.userName}`}
+
+
+                    <small>
+                      {formatRelativeTime(
+                        item.returnedAt ||
+                        item.issuedAt
+                      )}
+                    </small>
+
+                  </span>
+
+                </div>
+
+              )
+            )
+
+          )}
 
         </article>
 
+
+        {/* ===================================================
+            RETURNS DUE
+        =================================================== */}
+
         <article className="due">
 
-          <p className="eyebrow">UP NEXT</p>
+          <p className="eyebrow">
+            UP NEXT
+          </p>
 
-          <h2>Returns due soon</h2>
 
-          <button
-            onClick={() =>
-              setSelected({
-                id: 'RES-001',
-                name: 'Raspberry Pi 5',
-                category: 'Hardware',
-                sub: 'Development Board',
-                quantity: 12,
-                status: 'Available',
-                tone: 'blue',
-              })
-            }
-          >
-            Raspberry Pi 5
-            <b>Sep 10</b>
-            <ChevronRight />
-          </button>
+          <h2>
+            Returns due soon
+          </h2>
 
-          <button
-            onClick={() =>
-              setSelected({
-                id: 'RES-002',
-                name: 'Arduino Uno',
-                category: 'Hardware',
-                sub: 'Development Board',
-                quantity: 18,
-                status: 'Available',
-                tone: 'green',
-              })
-            }
-          >
-            Arduino Uno
-            <b>Sep 12</b>
-            <ChevronRight />
-          </button>
+
+          {upcomingReturns.length === 0 ? (
+
+            <div className="event">
+
+              <span>
+                No upcoming returns.
+
+                <small>
+                  Nothing is due soon.
+                </small>
+              </span>
+
+            </div>
+
+          ) : (
+
+            upcomingReturns.map(
+              (item) => {
+
+                const resource =
+                  resources.find(
+                    (r) =>
+                      r.id ===
+                      item.resourceId
+                  );
+
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() =>
+                      resource &&
+                      setSelected(resource)
+                    }
+                  >
+
+                    {item.resourceName}
+
+                    <b>
+                      {item.returnDate}
+                    </b>
+
+                    <ChevronRight />
+
+                  </button>
+                );
+
+              }
+            )
+
+          )}
 
         </article>
 
       </section>
     </>
   );
+}
+
+
+/* =========================================================
+   RELATIVE TIME
+========================================================= */
+
+function formatRelativeTime(
+  value: string
+) {
+  const diff = Math.max(
+    0,
+    Date.now() -
+      new Date(value).getTime()
+  );
+
+
+  const minutes =
+    Math.floor(diff / 60000);
+
+
+  if (minutes < 1) {
+    return 'Just now';
+  }
+
+
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+
+
+  const hours =
+    Math.floor(minutes / 60);
+
+
+  if (hours < 24) {
+    return `${hours}h ago`;
+  }
+
+
+  const days =
+    Math.floor(hours / 24);
+
+
+  return `${days}d ago`;
 }
 
 
@@ -777,51 +1667,97 @@ function Inventory({
   setCat,
   setSelected,
   go,
+  role,
+  onDelete,
+  onEdit,
 }: any) {
+
   return (
     <>
+      {/* ===================================================
+          PAGE HEADER
+      =================================================== */}
+
       <section className="page-head">
 
         <div>
-          <p className="eyebrow">RESOURCE LIBRARY</p>
 
-          <h1>Inventory</h1>
+          <p className="eyebrow">
+            RESOURCE LIBRARY
+          </p>
+
+
+          <h1>
+            Inventory
+          </h1>
+
 
           <p className="lede">
             Find the right resource without digging through spreadsheets.
           </p>
+
         </div>
 
-        <button
-          className="primary"
-          onClick={() => go('Add resource')}
-        >
-          <CirclePlus /> Add new item
-        </button>
+
+        {role === 'Admin' && (
+
+          <button
+            className="primary"
+            onClick={() =>
+              go('Add resource')
+            }
+          >
+            <CirclePlus />
+            Add new item
+          </button>
+
+        )}
 
       </section>
+
+
+      {/* ===================================================
+          FILTERS
+      =================================================== */}
 
       <section className="filters">
 
         <Search />
 
+
         <input
           value={query}
           onChange={(e: any) =>
-            setQuery(e.target.value)
+            setQuery(
+              e.target.value
+            )
           }
           placeholder="Search by name"
         />
 
-        {['All', 'Hardware', 'Software'].map((x) => (
+
+        {[
+          'All',
+          'Hardware',
+          'Software',
+        ].map((x) => (
+
           <button
             key={x}
-            onClick={() => setCat(x)}
-            className={cat === x ? 'selected' : ''}
+            onClick={() =>
+              setCat(x)
+            }
+            className={
+              cat === x
+                ? 'selected'
+                : ''
+            }
           >
             {x}
           </button>
+
         ))}
+
 
         <button
           className="clear"
@@ -835,70 +1771,258 @@ function Inventory({
 
       </section>
 
+
+      {/* ===================================================
+          INVENTORY TABLE
+      =================================================== */}
+
       <section className="inventory">
 
         <div className="table-top">
-          <b>{filtered.length} resources</b>
-          <span>Availability is updated in real time</span>
+
+          <b>
+            {filtered.length} resources
+          </b>
+
+
+          <span>
+            Availability is updated in real time
+          </span>
+
         </div>
+
 
         <div className="table header-row">
-          <span>Resource</span>
-          <span>Category</span>
-          <span>Quantity</span>
-          <span>Status</span>
-          <span />
+
+          <span>
+            Resource
+          </span>
+
+          <span>
+            Category
+          </span>
+
+          <span>
+            Quantity
+          </span>
+
+          <span>
+            Status
+          </span>
+
+          <span>
+            {role === 'Admin'
+              ? 'Action'
+              : ''}
+          </span>
+
         </div>
 
-        {filtered.map((r: Resource) => (
-          <button
-            className="table resource-row"
-            onClick={() => setSelected(r)}
-            key={r.id}
-          >
 
-            <div className="resource-name">
+        {filtered.map(
+          (r: Resource) => (
 
-              <i className={r.tone}>
-                {r.category === 'Software'
-                  ? <Command />
-                  : <Cpu />}
-              </i>
+            <div
+              className="table resource-row"
+              key={r.id}
+              onClick={() =>
+                setSelected(r)
+              }
+              role="button"
+              tabIndex={0}
+              onKeyDown={
+                (event: any) => {
+
+                  if (
+                    event.key ===
+                      'Enter' ||
+                    event.key === ' '
+                  ) {
+
+                    event.preventDefault();
+
+                    setSelected(r);
+                  }
+
+                }
+              }
+            >
+
+              {/* RESOURCE */}
+
+              <div className="resource-name">
+
+                <i className={r.tone}>
+
+                  {r.category ===
+                  'Software' ? (
+                    <Command />
+                  ) : (
+                    <Cpu />
+                  )}
+
+                </i>
+
+
+                <span>
+
+                  <b>
+                    {r.name}
+                  </b>
+
+
+                  <small>
+                    {r.id} · {r.sub}
+                  </small>
+
+                </span>
+
+              </div>
+
+
+              {/* CATEGORY */}
 
               <span>
-                <b>{r.name}</b>
-
-                <small>
-                  {r.id} · {r.sub}
-                </small>
+                {r.category}
               </span>
+
+
+              {/* QUANTITY */}
+
+              <b>
+                {r.quantity}
+              </b>
+
+
+              {/* STATUS */}
+
+              <span
+                className={`badge ${
+                  r.status ===
+                  'Available'
+                    ? 'available'
+                    : 'low'
+                }`}
+              >
+                {r.status}
+              </span>
+
+
+              {/* ACTION */}
+
+              {role === 'Admin' ? (
+
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 7,
+                    alignItems:
+                      'center',
+                  }}
+                >
+
+                  <button
+                    type="button"
+                    title={`Edit ${r.name}`}
+                    aria-label={`Edit ${r.name}`}
+                    onClick={(
+                      event
+                    ) => {
+                      event.stopPropagation();
+                      onEdit(r);
+                    }}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      display:
+                        'inline-flex',
+                      alignItems:
+                        'center',
+                      justifyContent:
+                        'center',
+                      border:
+                        '1px solid #e2e5ef',
+                      borderRadius: 9,
+                      background:
+                        '#fff',
+                      color:
+                        '#665fd8',
+                      cursor:
+                        'pointer',
+                    }}
+                  >
+                    <Edit3 size={16} />
+                  </button>
+
+
+                  <button
+                    type="button"
+                    title={`Delete ${r.name}`}
+                    aria-label={`Delete ${r.name}`}
+                    onClick={(
+                      event
+                    ) => {
+                      event.stopPropagation();
+                      onDelete(r);
+                    }}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      display:
+                        'inline-flex',
+                      alignItems:
+                        'center',
+                      justifyContent:
+                        'center',
+                      border:
+                        '1px solid #eadfe2',
+                      borderRadius: 9,
+                      background:
+                        '#fff',
+                      color:
+                        '#c55454',
+                      cursor:
+                        'pointer',
+                    }}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+
+                </div>
+
+              ) : (
+
+                <ChevronRight />
+
+              )}
 
             </div>
 
-            <span>{r.category}</span>
+          )
+        )}
 
-            <b>{r.quantity}</b>
 
-            <span
-              className={`badge ${
-                r.status === 'Available'
-                  ? 'available'
-                  : 'low'
-              }`}
-            >
-              {r.status}
-            </span>
+        {filtered.length === 0 && (
 
-            <ChevronRight />
+          <div
+            style={{
+              padding:
+                '32px 20px',
+              textAlign:
+                'center',
+              color:
+                '#7b8195',
+            }}
+          >
+            No resources found.
+          </div>
 
-          </button>
-        ))}
+        )}
 
       </section>
     </>
   );
 }
-
 
 /* =========================================================
    DETAILS
@@ -914,10 +2038,11 @@ function Details({
       className="drawer-shade"
       onClick={onClose}
     >
-
       <aside
         className="detail"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) =>
+          e.stopPropagation()
+        }
       >
 
         <button
@@ -927,9 +2052,11 @@ function Details({
           <X />
         </button>
 
+
         <p className="eyebrow">
           {resource.id}
         </p>
+
 
         <div
           className={`resource-art ${resource.tone}`}
@@ -937,34 +2064,68 @@ function Details({
           <Cpu />
         </div>
 
-        <h2>{resource.name}</h2>
+
+        <h2>
+          {resource.name}
+        </h2>
+
 
         <p>
           {resource.category} · {resource.sub}
         </p>
 
+
         <div className="availability">
 
-          <b>{resource.quantity}</b>
+          <b>
+            {resource.quantity}
+          </b>
+
           {' '}available
 
           <span className="badge available">
-            In stock
+            {resource.quantity > 0
+              ? 'In stock'
+              : 'Unavailable'}
           </span>
 
         </div>
+
 
         <div className="stat-grid">
 
           <span>
             Total
-            <b>{resource.quantity}</b>
+            <b>
+              {resource.quantity}
+            </b>
           </span>
+
 
           <span>
             Issued
-            <b>0</b>
+            <b>
+              {getAllIssues()
+                .filter(
+                  (issue) =>
+                    issue.resourceId ===
+                      resource.id &&
+                    (
+                      issue.status ===
+                        'Issued' ||
+                      issue.status ===
+                        'Overdue'
+                    )
+                )
+                .reduce(
+                  (sum, issue) =>
+                    sum +
+                    (issue.quantity || 1),
+                  0
+                )}
+            </b>
           </span>
+
 
           <span>
             Reserved
@@ -973,12 +2134,18 @@ function Details({
 
         </div>
 
-        <h3>Specifications</h3>
+
+        <h3>
+          Specifications
+        </h3>
+
 
         <dl>
 
           <div>
-            <dt>Location</dt>
+            <dt>
+              Location
+            </dt>
 
             <dd>
               {resource.location ||
@@ -986,26 +2153,48 @@ function Details({
             </dd>
           </div>
 
+
           <div>
-            <dt>Classification</dt>
+            <dt>
+              Classification
+            </dt>
 
             <dd>
-              {resource.category} / {resource.sub}
+              {resource.category} /{' '}
+              {resource.sub}
             </dd>
           </div>
 
         </dl>
 
+
         <button
           className="primary full"
           onClick={onIssue}
+          disabled={
+            resource.quantity <= 0
+          }
+          style={{
+            opacity:
+              resource.quantity <= 0
+                ? 0.55
+                : 1,
+            cursor:
+              resource.quantity <= 0
+                ? 'not-allowed'
+                : 'pointer',
+          }}
         >
-          Issue resource
-          <ChevronRight />
+          {resource.quantity <= 0
+            ? 'Currently unavailable'
+            : 'Issue resource'}
+
+          {resource.quantity > 0 && (
+            <ChevronRight />
+          )}
         </button>
 
       </aside>
-
     </div>
   );
 }
@@ -1028,18 +2217,29 @@ function Issue({
       <section className="page-head">
 
         <div>
+
           <p className="eyebrow">
             ACCOUNTABLE HANDOFF
           </p>
 
-          <h1>Issue a resource</h1>
+
+          <h1>
+            Issue a resource
+          </h1>
+
 
           <p className="lede">
             A lightweight handoff that keeps every item accountable.
           </p>
+
         </div>
 
       </section>
+
+
+      {/* ===================================================
+          STEPS
+      =================================================== */}
 
       <div className="steps">
 
@@ -1047,9 +2247,17 @@ function Issue({
           01 <span>Select item</span>
         </b>
 
-        <b className={selected ? 'done' : ''}>
+
+        <b
+          className={
+            selected
+              ? 'done'
+              : ''
+          }
+        >
           02 <span>Recipient</span>
         </b>
+
 
         <b>
           03 <span>Confirm</span>
@@ -1057,66 +2265,173 @@ function Issue({
 
       </div>
 
+
       <section className="issue-layout">
 
         <div className="issue-form">
 
+          {/* =================================================
+              RESOURCE SELECT
+          ================================================= */}
+
           <label>
+
             Resource
 
             <select
-              value={selected?.id || ''}
-              onChange={(e) =>
-                setSelected(
+              value={
+                selected?.id || ''
+              }
+              onChange={(e) => {
+
+                const resource =
                   resources.find(
                     (r: Resource) =>
-                      r.id === e.target.value
-                  ) || null
-                )
-              }
+                      r.id ===
+                      e.target.value
+                  ) || null;
+
+
+                setSelected(
+                  resource
+                );
+
+
+                // Reset quantity whenever
+                // a different resource is selected.
+                setIssue({
+                  ...issue,
+                  quantity: 1,
+                });
+
+              }}
             >
 
               <option value="">
                 Select an inventory item
               </option>
 
-              {resources.map((r: Resource) => (
-                <option
-                  value={r.id}
-                  key={r.id}
-                  disabled={r.quantity <= 0}
-                >
-                  {r.name} — {r.quantity} available
-                </option>
-              ))}
+
+              {resources.map(
+                (r: Resource) => (
+
+                  <option
+                    value={r.id}
+                    key={r.id}
+                    disabled={
+                      r.quantity <= 0
+                    }
+                  >
+                    {r.name} —{' '}
+                    {r.quantity}{' '}
+                    available
+                  </option>
+
+                )
+              )}
 
             </select>
 
           </label>
 
+
+          {/* =================================================
+              SELECTED RESOURCE
+          ================================================= */}
+
           {selected && (
+
             <div className="selected-resource">
 
               <Cpu />
 
+
               <span>
-                <b>{selected.name}</b>
+
+                <b>
+                  {selected.name}
+                </b>
+
 
                 <small>
-                  {selected.category} · {selected.sub}
+                  {selected.category} ·{' '}
+                  {selected.sub}
                 </small>
+
               </span>
 
+
               <em>
-                {selected.quantity} available
+                {selected.quantity}{' '}
+                available
               </em>
 
             </div>
+
           )}
+
+
+          {/* =================================================
+              QUANTITY
+          ================================================= */}
+
+          {selected && (
+
+            <label>
+
+              Quantity
+
+              <select
+                value={Math.min(
+                  issue.quantity,
+                  selected.quantity
+                )}
+                onChange={(e) =>
+                  setIssue({
+                    ...issue,
+                    quantity:
+                      Number(
+                        e.target.value
+                      ),
+                  })
+                }
+              >
+
+                {Array.from(
+                  {
+                    length:
+                      selected.quantity,
+                  },
+                  (_, index) =>
+                    index + 1
+                ).map(
+                  (quantity) => (
+
+                    <option
+                      key={quantity}
+                      value={quantity}
+                    >
+                      {quantity}
+                    </option>
+
+                  )
+                )}
+
+              </select>
+
+            </label>
+
+          )}
+
+
+          {/* =================================================
+              RECIPIENT + PROFESSION
+          ================================================= */}
 
           <div className="form-grid">
 
             <label>
+
               Issued to
 
               <input
@@ -1124,22 +2439,29 @@ function Issue({
                 onChange={(e) =>
                   setIssue({
                     ...issue,
-                    name: e.target.value,
+                    name:
+                      e.target.value,
                   })
                 }
                 placeholder="Person's full name"
               />
+
             </label>
 
+
             <label>
+
               Profession
 
               <select
-                value={issue.profession}
+                value={
+                  issue.profession
+                }
                 onChange={(e) =>
                   setIssue({
                     ...issue,
-                    profession: e.target.value,
+                    profession:
+                      e.target.value,
                   })
                 }
               >
@@ -1152,9 +2474,14 @@ function Issue({
                   'Project Member',
                   'Other',
                 ].map((x) => (
-                  <option key={x}>
+
+                  <option
+                    key={x}
+                    value={x}
+                  >
                     {x}
                   </option>
+
                 ))}
 
               </select>
@@ -1163,11 +2490,20 @@ function Issue({
 
           </div>
 
+
+          {/* =================================================
+              RETURNABLE
+          ================================================= */}
+
           <fieldset>
 
-            <legend>Returnable?</legend>
+            <legend>
+              Returnable?
+            </legend>
+
 
             <button
+              type="button"
               className={
                 issue.returnable
                   ? 'chosen'
@@ -1183,7 +2519,9 @@ function Issue({
               Yes
             </button>
 
+
             <button
+              type="button"
               className={
                 !issue.returnable
                   ? 'chosen'
@@ -1201,8 +2539,15 @@ function Issue({
 
           </fieldset>
 
+
+          {/* =================================================
+              RETURN DATE
+          ================================================= */}
+
           {issue.returnable && (
+
             <label>
+
               Return date
 
               <input
@@ -1210,32 +2555,59 @@ function Issue({
                 onChange={(e) =>
                   setIssue({
                     ...issue,
-                    date: e.target.value,
+                    date:
+                      e.target.value,
                   })
                 }
               />
+
             </label>
+
           )}
 
+
+          {/* =================================================
+              SUBMIT
+          ================================================= */}
+
           <button
+            type="button"
             className="primary"
             onClick={onSubmit}
+            disabled={
+              !selected ||
+              selected.quantity <= 0
+            }
           >
-            Issue resource
+
+            Issue{' '}
+            {issue.quantity > 1
+              ? `${issue.quantity} resources`
+              : 'resource'}
+
             <ChevronRight />
+
           </button>
 
         </div>
+
+
+        {/* =================================================
+            SYSTEM NOTE
+        ================================================= */}
 
         <aside className="system-note">
 
           <Sparkles />
 
+
           <p className="eyebrow">
             SYSTEM RECORD
           </p>
 
+
           <b>
+
             {new Date().toLocaleDateString(
               'en-IN',
               {
@@ -1255,7 +2627,9 @@ function Issue({
                 hour12: true,
               }
             )}
+
           </b>
+
 
           <p>
             Date and time are captured automatically
@@ -1277,14 +2651,25 @@ function Issue({
 function History({
   onResourcesChange,
 }: {
-  onResourcesChange: (resources: Resource[]) => void;
+  onResourcesChange:
+    (resources: Resource[]) => void;
 }) {
-  const [issues, setIssues] = useState(getAllIssues());
 
-  const [search, setSearch] = useState('');
+  const [issues, setIssues] =
+    useState(getAllIssues());
 
-  const formatDateTime = (date: string) => {
-    return new Date(date).toLocaleString(
+
+  const [search, setSearch] =
+    useState('');
+
+
+  const formatDateTime = (
+    date: string
+  ) => {
+
+    return new Date(
+      date
+    ).toLocaleString(
       'en-IN',
       {
         day: '2-digit',
@@ -1295,16 +2680,31 @@ function History({
         hour12: true,
       }
     );
+
   };
 
-  const formatReturnDate = (date?: string) => {
-    if (!date) return '—';
 
-    const parsed = new Date(date);
+  const formatReturnDate = (
+    date?: string
+  ) => {
 
-    if (isNaN(parsed.getTime())) {
+    if (!date) {
+      return '—';
+    }
+
+
+    const parsed =
+      new Date(date);
+
+
+    if (
+      isNaN(
+        parsed.getTime()
+      )
+    ) {
       return date;
     }
+
 
     return parsed.toLocaleDateString(
       'en-IN',
@@ -1314,32 +2714,52 @@ function History({
         year: 'numeric',
       }
     );
+
   };
 
-  const filteredIssues = issues.filter((item) => {
-    const text =
-      `${item.resourceName} ${item.userName}`.toLowerCase();
 
-    return text.includes(search.toLowerCase());
-  });
+  const filteredIssues =
+    issues.filter((item) => {
 
-  // =========================
-  // RETURN RESOURCE
-  // =========================
+      const text =
+        `${item.resourceName} ${item.userName}`
+          .toLowerCase();
 
-  const handleReturn = (issueId: string) => {
 
-    const updatedIssues = returnIssue(issueId);
+      return text.includes(
+        search.toLowerCase()
+      );
 
-    // Keep the SAME history record,
-    // only change its status to Returned.
-    setIssues(updatedIssues);
+    });
 
-    // Refresh inventory quantity.
-    const updatedResources = getAllResources();
 
-    onResourcesChange(updatedResources);
+  /* =======================================================
+     RETURN RESOURCE
+  ======================================================= */
+
+  const handleReturn = (
+    issueId: string
+  ) => {
+
+    const updatedIssues =
+      returnIssue(issueId);
+
+
+    setIssues(
+      updatedIssues
+    );
+
+
+    const updatedResources =
+      getAllResources();
+
+
+    onResourcesChange(
+      updatedResources
+    );
+
   };
+
 
   return (
     <>
@@ -1351,7 +2771,11 @@ function History({
             MOVEMENT LOG
           </p>
 
-          <h1>History</h1>
+
+          <h1>
+            History
+          </h1>
+
 
           <p className="lede">
             A complete record of every issue, return and resource movement.
@@ -1359,15 +2783,19 @@ function History({
 
         </div>
 
+
         <button className="secondary">
           Export history
         </button>
 
       </section>
 
+
       <section className="history-list">
 
-        {/* TOP */}
+        {/* =================================================
+            TOP
+        ================================================= */}
 
         <div className="history-top">
 
@@ -1377,23 +2805,29 @@ function History({
               {issues.length} records
             </h2>
 
+
             <p>
               Showing all resource movements
             </p>
 
           </div>
 
+
           <div className="history-filters">
 
             <Search />
 
+
             <input
               value={search}
               onChange={(e) =>
-                setSearch(e.target.value)
+                setSearch(
+                  e.target.value
+                )
               }
               placeholder="Search by resource or person..."
             />
+
 
             <button>
               All time
@@ -1403,31 +2837,47 @@ function History({
 
         </div>
 
-        {/* TABLE HEADER */}
+
+        {/* =================================================
+            TABLE HEADER
+        ================================================= */}
 
         <div className="history-header">
 
-          <span>#</span>
+          <span>
+            #
+          </span>
+
 
           <span>
             Resource Name
           </span>
 
+
           <span>
             Person Name
           </span>
+
+
+          <span>
+            Quantity
+          </span>
+
 
           <span>
             Issued At
           </span>
 
+
           <span>
             Return Date
           </span>
 
+
           <span>
             Status
           </span>
+
 
           <span>
             Action
@@ -1435,7 +2885,10 @@ function History({
 
         </div>
 
-        {/* EMPTY */}
+
+        {/* =================================================
+            EMPTY
+        ================================================= */}
 
         {filteredIssues.length === 0 ? (
 
@@ -1445,73 +2898,99 @@ function History({
 
         ) : (
 
-          filteredIssues.map((item, index) => (
+          filteredIssues.map(
+            (item, index) => (
 
-            <div
-              className="history-row"
-              key={item.id}
-            >
+              <div
+                className="history-row"
+                key={item.id}
+              >
 
-              <span>
-                {index + 1}
-              </span>
+                <span>
+                  {index + 1}
+                </span>
 
-              <span className="main">
-                {item.resourceName}
-              </span>
 
-              <span>
-                {item.userName}
-              </span>
+                <span className="main">
+                  {item.resourceName}
+                </span>
 
-              <span>
-                {formatDateTime(item.issuedAt)}
-              </span>
 
-              <span>
-                {formatReturnDate(item.returnDate)}
-              </span>
+                <span>
+                  {item.userName}
+                </span>
 
-              <span>
 
-                <b
-                  className={`badge ${
-                    item.status === 'Returned'
-                      ? 'returned'
-                      : item.status === 'Overdue'
-                        ? 'overdue'
-                        : 'available'
-                  }`}
-                >
-                  {item.status}
-                </b>
+                <span>
+                  {item.quantity || 1}
+                </span>
 
-              </span>
 
-              <span>
+                <span>
+                  {formatDateTime(
+                    item.issuedAt
+                  )}
+                </span>
 
-                {item.status === 'Issued' ? (
 
-                  <button
-                    className="return-btn"
-                    onClick={() =>
-                      handleReturn(item.id)
-                    }
+                <span>
+                  {formatReturnDate(
+                    item.returnDate
+                  )}
+                </span>
+
+
+                <span>
+
+                  <b
+                    className={`badge ${
+                      item.status ===
+                      'Returned'
+                        ? 'returned'
+                        : item.status ===
+                          'Overdue'
+                          ? 'overdue'
+                          : 'available'
+                    }`}
                   >
-                    Return
-                  </button>
+                    {item.status}
+                  </b>
 
-                ) : (
+                </span>
 
-                  <span>—</span>
 
-                )}
+                <span>
 
-              </span>
+                  {item.status ===
+                    'Issued' ||
+                  item.status ===
+                    'Overdue' ? (
 
-            </div>
+                    <button
+                      className="return-btn"
+                      onClick={() =>
+                        handleReturn(
+                          item.id
+                        )
+                      }
+                    >
+                      Return
+                    </button>
 
-          ))
+                  ) : (
+
+                    <span>
+                      —
+                    </span>
+
+                  )}
+
+                </span>
+
+              </div>
+
+            )
+          )
 
         )}
 
@@ -1520,34 +2999,274 @@ function History({
   );
 }
 
-
 /* =========================================================
    PEOPLE
 ========================================================= */
 
 function People() {
+  const [users, setUsers] = useState<User[]>(initializeUsers());
+  const [name, setName] = useState('');
+  const [profession, setProfession] =
+    useState<Profession>('Student');
+  const [role, setRole] = useState<Role>('User');
+
+  const addPerson = () => {
+    if (!name.trim()) return;
+
+    const newUser: User = {
+      id: `USR-${String(users.length + 1).padStart(3, '0')}`,
+      name: name.trim(),
+      profession,
+      role,
+    };
+
+    const updated = [...users, newUser];
+
+    saveUsers(updated);
+    setUsers(updated);
+    setName('');
+    setProfession('Student');
+    setRole('User');
+  };
+
   return (
-    <section className="empty">
+    <div className="people-page">
 
-      <Users />
+      <section className="page-head">
+        <div>
+          <p className="eyebrow">PEOPLE & ACCESS</p>
 
-      <p className="eyebrow">
-        ACCESS DIRECTORY
-      </p>
+          <h1>People</h1>
 
-      <h1>
-        People
-      </h1>
+          <p className="lede">
+            Manage users and access across the DeepTech innovation centre.
+          </p>
+        </div>
 
-      <p className="lede">
-        Manage who can access and borrow project resources.
-      </p>
+        <div className="page-head-icon">
+          <Users size={24} />
+        </div>
+      </section>
 
-      <button className="primary">
-        Add person
-      </button>
 
-    </section>
+      <section className="people-stats">
+
+        <div className="people-stat-card">
+          <div className="stat-icon">
+            <Users size={20} />
+          </div>
+
+          <div>
+            <span>Total people</span>
+            <strong>{users.length}</strong>
+          </div>
+        </div>
+
+
+        <div className="people-stat-card">
+          <div className="stat-icon">
+            <GraduationCap size={20} />
+          </div>
+
+          <div>
+            <span>Students</span>
+            <strong>
+              {users.filter(
+                (u) => u.profession === 'Student'
+              ).length}
+            </strong>
+          </div>
+        </div>
+
+
+        <div className="people-stat-card">
+          <div className="stat-icon">
+            <ShieldCheck size={20} />
+          </div>
+
+          <div>
+            <span>Admins</span>
+            <strong>
+              {users.filter(
+                (u) => u.role === 'Admin'
+              ).length}
+            </strong>
+          </div>
+        </div>
+
+      </section>
+
+
+      <section className="people-grid">
+
+        {/* ADD PERSON */}
+
+        <div className="panel people-form-card">
+
+          <div className="panel-head">
+            <div>
+              <p className="eyebrow">NEW USER</p>
+              <h2>Add person</h2>
+            </div>
+
+            <div className="panel-icon">
+              <Plus size={19} />
+            </div>
+          </div>
+
+
+          <p className="panel-description">
+            Add a person who can access innovation centre resources.
+          </p>
+
+
+          <div className="form-field">
+            <label>Full name</label>
+
+            <input
+              value={name}
+              onChange={(e) =>
+                setName(e.target.value)
+              }
+              placeholder="Enter full name"
+            />
+          </div>
+
+
+          <div className="form-field">
+            <label>Profession</label>
+
+            <select
+              value={profession}
+              onChange={(e) =>
+                setProfession(
+                  e.target.value as Profession
+                )
+              }
+            >
+              <option value="Student">Student</option>
+              <option value="Teacher">Teacher</option>
+              <option value="Staff">Staff</option>
+              <option value="Researcher">Researcher</option>
+              <option value="Project Member">
+                Project Member
+              </option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+
+          <div className="form-field">
+            <label>Access role</label>
+
+            <select
+              value={role}
+              onChange={(e) =>
+                setRole(
+                  e.target.value as Role
+                )
+              }
+            >
+              <option value="User">User</option>
+              <option value="Admin">Admin</option>
+            </select>
+          </div>
+
+
+          <button
+            className="primary full people-add-button"
+            onClick={addPerson}
+            disabled={!name.trim()}
+          >
+            <Plus size={18} />
+            Add person
+          </button>
+
+        </div>
+
+
+        {/* DIRECTORY */}
+
+        <div className="panel people-directory">
+
+          <div className="panel-head">
+
+            <div>
+              <p className="eyebrow">DIRECTORY</p>
+
+              <h2>People directory</h2>
+            </div>
+
+            <span className="count-pill">
+              {users.length} people
+            </span>
+
+          </div>
+
+
+          <div className="people-table">
+
+            <div className="people-table-head">
+              <span>PERSON</span>
+              <span>PROFESSION</span>
+              <span>ROLE</span>
+            </div>
+
+
+            {users.map((user) => (
+
+              <div
+                className="people-table-row"
+                key={user.id}
+              >
+
+                <div className="person-info">
+
+                  <div className="person-avatar">
+                    {user.name
+                      .charAt(0)
+                      .toUpperCase()}
+                  </div>
+
+                  <div>
+                    <strong>
+                      {user.name}
+                    </strong>
+
+                    <small>
+                      {user.id}
+                    </small>
+                  </div>
+
+                </div>
+
+
+                <span className="profession-pill">
+                  {user.profession}
+                </span>
+
+
+                <span
+                  className={
+                    user.role === 'Admin'
+                      ? 'role-pill admin'
+                      : 'role-pill user'
+                  }
+                >
+                  {user.role}
+                </span>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
   );
 }
 
@@ -1556,28 +3275,663 @@ function People() {
    INSIGHTS
 ========================================================= */
 
-function Insights() {
+function Insights({
+  resources,
+  issues,
+}: {
+  resources: Resource[];
+  issues: Issue[];
+}) {
+
+  const available = resources.reduce(
+    (sum, resource) =>
+      sum + resource.quantity,
+    0
+  );
+
+  const issued = issues
+    .filter(
+      (issue) =>
+        issue.status === 'Issued' ||
+        issue.status === 'Overdue'
+    )
+    .reduce(
+      (sum, issue) =>
+        sum + (issue.quantity || 1),
+      0
+    );
+
+  const returned = issues
+    .filter(
+      (issue) =>
+        issue.status === 'Returned'
+    )
+    .reduce(
+      (sum, issue) =>
+        sum + (issue.quantity || 1),
+      0
+    );
+
+  const overdue = issues
+    .filter(
+      (issue) =>
+        issue.status === 'Overdue'
+    )
+    .reduce(
+      (sum, issue) =>
+        sum + (issue.quantity || 1),
+      0
+    );
+
+  const totalMovements = issues.reduce(
+    (sum, issue) =>
+      sum + (issue.quantity || 1),
+    0
+  );
+
+  const totalInventory =
+    available + issued;
+
+  const utilization =
+    totalInventory > 0
+      ? Math.round(
+          (issued / totalInventory) * 100
+        )
+      : 0;
+
+
+  const hardwareCount =
+    resources
+      .filter(
+        (r) =>
+          r.category === 'Hardware'
+      )
+      .reduce(
+        (sum, r) =>
+          sum + r.quantity,
+        0
+      );
+
+  const softwareCount =
+    resources
+      .filter(
+        (r) =>
+          r.category === 'Software'
+      )
+      .reduce(
+        (sum, r) =>
+          sum + r.quantity,
+        0
+      );
+
+
   return (
-    <section className="empty">
+    <div className="insights-page">
 
-      <Sparkles />
+      {/* HEADER */}
 
-      <p className="eyebrow">
-        RESOURCE INTELLIGENCE
-      </p>
+      <section className="page-head">
 
-      <h1>
-        Electronics account for 42%
-        <br />
-        of all resource issues.
-      </h1>
+        <div>
+          <p className="eyebrow">
+            RESOURCE INTELLIGENCE
+          </p>
 
-      <p className="lede">
-        Development boards are currently the most
-        frequently borrowed category.
-      </p>
+          <h1>Insights</h1>
 
-    </section>
+          <p className="lede">
+            Monitor inventory usage, resource movement and centre activity.
+          </p>
+        </div>
+
+        <div className="page-head-icon">
+          <BarChart3 size={24} />
+        </div>
+
+      </section>
+
+
+      {/* MAIN METRICS */}
+
+      <section className="insight-metrics">
+
+        <div className="insight-card">
+
+          <div className="insight-card-top">
+            <span>Available inventory</span>
+
+            <div className="insight-icon">
+              <Package size={19} />
+            </div>
+          </div>
+
+          <strong>{available}</strong>
+
+          <small>
+            Units currently available
+          </small>
+
+        </div>
+
+
+        <div className="insight-card">
+
+          <div className="insight-card-top">
+            <span>Currently issued</span>
+
+            <div className="insight-icon">
+              <ArrowUpRight size={19} />
+            </div>
+          </div>
+
+          <strong>{issued}</strong>
+
+          <small>
+            Units with users
+          </small>
+
+        </div>
+
+
+        <div className="insight-card">
+
+          <div className="insight-card-top">
+            <span>Returned</span>
+
+            <div className="insight-icon">
+              <Check size={19} />
+            </div>
+          </div>
+
+          <strong>{returned}</strong>
+
+          <small>
+            Units returned
+          </small>
+
+        </div>
+
+
+        <div className="insight-card danger">
+
+          <div className="insight-card-top">
+            <span>Overdue</span>
+
+            <div className="insight-icon">
+              <CircleAlert size={19} />
+            </div>
+          </div>
+
+          <strong>{overdue}</strong>
+
+          <small>
+            Requires attention
+          </small>
+
+        </div>
+
+      </section>
+
+
+      {/* ANALYTICS */}
+
+      <section className="insights-grid">
+
+        {/* UTILIZATION */}
+
+        <div className="panel utilization-card">
+
+          <div className="panel-head">
+
+            <div>
+              <p className="eyebrow">
+                INVENTORY USAGE
+              </p>
+
+              <h2>
+                Resource utilization
+              </h2>
+            </div>
+
+            <Activity size={21} />
+
+          </div>
+
+
+          <div className="utilization-value">
+            {utilization}%
+          </div>
+
+
+          <div className="usage-bar">
+
+            <div
+              style={{
+                width: `${utilization}%`,
+              }}
+            />
+
+          </div>
+
+
+          <div className="usage-labels">
+            <span>0%</span>
+            <span>100%</span>
+          </div>
+
+
+          <p className="panel-description">
+            Percentage of total tracked inventory currently issued to users.
+          </p>
+
+        </div>
+
+
+        {/* INVENTORY BREAKDOWN */}
+
+        <div className="panel">
+
+          <div className="panel-head">
+
+            <div>
+              <p className="eyebrow">
+                INVENTORY MIX
+              </p>
+
+              <h2>
+                Resource categories
+              </h2>
+            </div>
+
+            <Boxes size={21} />
+
+          </div>
+
+
+          <div className="category-stat">
+
+            <div className="category-label">
+              <span className="category-dot hardware" />
+
+              <span>
+                Hardware
+              </span>
+            </div>
+
+            <strong>
+              {hardwareCount}
+            </strong>
+
+          </div>
+
+
+          <div className="category-bar">
+            <div
+              style={{
+                width:
+                  `${available > 0
+                    ? (hardwareCount /
+                        available) *
+                      100
+                    : 0}%`,
+              }}
+            />
+          </div>
+
+
+          <div className="category-stat">
+
+            <div className="category-label">
+              <span className="category-dot software" />
+
+              <span>
+                Software
+              </span>
+            </div>
+
+            <strong>
+              {softwareCount}
+            </strong>
+
+          </div>
+
+
+          <div className="category-bar">
+            <div
+              style={{
+                width:
+                  `${available > 0
+                    ? (softwareCount /
+                        available) *
+                      100
+                    : 0}%`,
+              }}
+            />
+          </div>
+
+        </div>
+
+
+        {/* ACTIVITY */}
+
+        <div className="panel activity-summary">
+
+          <div className="panel-head">
+
+            <div>
+              <p className="eyebrow">
+                MOVEMENT ACTIVITY
+              </p>
+
+              <h2>
+                Resource movements
+              </h2>
+            </div>
+
+            <ClipboardList size={21} />
+
+          </div>
+
+
+          <div className="movement-number">
+            {totalMovements}
+          </div>
+
+
+          <p>
+            Total units moved through the centre.
+          </p>
+
+
+          <div className="movement-breakdown">
+
+            <div>
+              <span>Issued</span>
+              <strong>{issued}</strong>
+            </div>
+
+            <div>
+              <span>Returned</span>
+              <strong>{returned}</strong>
+            </div>
+
+            <div>
+              <span>Overdue</span>
+              <strong>{overdue}</strong>
+            </div>
+
+          </div>
+
+        </div>
+
+
+        {/* STATUS */}
+
+        <div className="panel">
+
+          <div className="panel-head">
+
+            <div>
+              <p className="eyebrow">
+                SYSTEM STATUS
+              </p>
+
+              <h2>
+                Inventory health
+              </h2>
+            </div>
+
+            <CircleAlert size={21} />
+
+          </div>
+
+
+          <div className="health-list">
+
+            <div>
+              <span>
+                Total resources
+              </span>
+
+              <strong>
+                {resources.length}
+              </strong>
+            </div>
+
+
+            <div>
+              <span>
+                Low stock
+              </span>
+
+              <strong>
+                {
+                  resources.filter(
+                    (r) =>
+                      r.status === 'Low stock'
+                  ).length
+                }
+              </strong>
+            </div>
+
+
+            <div>
+              <span>
+                Unavailable
+              </span>
+
+              <strong>
+                {
+                  resources.filter(
+                    (r) =>
+                      r.status === 'Unavailable'
+                  ).length
+                }
+              </strong>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+    </div>
+  );
+}
+
+/* =========================================================
+   EDIT RESOURCE
+========================================================= */
+
+function EditResource({
+  resource,
+  onSave,
+  onClose,
+}: any) {
+
+  const [form, setForm] =
+    useState<Resource>({
+      ...resource,
+    });
+
+
+  const update = (
+    key: keyof Resource,
+    value: any
+  ) => {
+
+    setForm({
+      ...form,
+      [key]: value,
+    });
+
+  };
+
+
+  const handleSave = () => {
+
+    if (!form.name.trim()) {
+      return;
+    }
+
+
+    onSave(
+      form.id,
+      form
+    );
+
+    onClose();
+
+  };
+
+
+  return (
+    <div
+      className="drawer-shade"
+      onClick={onClose}
+    >
+
+      <aside
+        className="detail"
+        onClick={(e) =>
+          e.stopPropagation()
+        }
+      >
+
+        <button
+          className="close"
+          onClick={onClose}
+        >
+          <X />
+        </button>
+
+
+        <p className="eyebrow">
+          EDIT RESOURCE
+        </p>
+
+
+        <h2>
+          Update resource
+        </h2>
+
+
+        <label>
+
+          Resource name
+
+          <input
+            value={form.name}
+            onChange={(e) =>
+              update(
+                'name',
+                e.target.value
+              )
+            }
+          />
+
+        </label>
+
+
+        <label>
+
+          Category
+
+          <select
+            value={form.category}
+            onChange={(e) =>
+              update(
+                'category',
+                e.target.value
+              )
+            }
+          >
+
+            <option value="Hardware">
+              Hardware
+            </option>
+
+            <option value="Software">
+              Software
+            </option>
+
+          </select>
+
+        </label>
+
+
+        <label>
+
+          Sub-category
+
+          <input
+            value={form.sub}
+            onChange={(e) =>
+              update(
+                'sub',
+                e.target.value
+              )
+            }
+          />
+
+        </label>
+
+
+        <label>
+
+          Quantity
+
+          <input
+            type="number"
+            min="0"
+            value={form.quantity}
+            onChange={(e) =>
+              update(
+                'quantity',
+                Math.max(
+                  0,
+                  Number(
+                    e.target.value
+                  )
+                )
+              )
+            }
+          />
+
+        </label>
+
+
+        <label>
+
+          Location
+
+          <input
+            value={
+              form.location || ''
+            }
+            onChange={(e) =>
+              update(
+                'location',
+                e.target.value
+              )
+            }
+          />
+
+        </label>
+
+
+        <button
+          className="primary full"
+          onClick={handleSave}
+        >
+          Save changes
+          <Check />
+        </button>
+
+      </aside>
+
+    </div>
   );
 }
 
@@ -1587,111 +3941,261 @@ function Insights() {
 ========================================================= */
 
 function AddResource({
-  onAdd,
-  go,
-}: {
-  onAdd: () => void;
-  go: (page: string) => void;
-}) {
+  onAdded,
+  onClose,
+}: any) {
+
+  const [name, setName] =
+    useState('');
+
+  const [category, setCategory] =
+    useState<Category>('Hardware');
+
+  const [sub, setSub] =
+    useState('');
+
+  const [quantity, setQuantity] =
+    useState(1);
+
+  const [location, setLocation] =
+    useState('');
+
+
+  const handleAdd = () => {
+
+    if (!name.trim()) {
+      return;
+    }
+
+
+    const resource: Resource = {
+
+      id: `RES-${String(
+        Date.now()
+      ).slice(-6)}`,
+
+      name:
+        name.trim(),
+
+      category,
+
+      sub:
+        sub.trim() ||
+        'General',
+
+      quantity:
+        Math.max(
+          0,
+          quantity
+        ),
+
+      status:
+        quantity <= 0
+          ? 'Unavailable'
+          : quantity <= 3
+            ? 'Low stock'
+            : 'Available',
+
+      tone:
+        category ===
+        'Hardware'
+          ? 'blue'
+          : 'purple',
+
+      location:
+        location.trim() ||
+        'Innovation Centre',
+
+    };
+
+
+    const updated =
+      addResource(
+        resource
+      );
+
+
+    onAdded(
+      updated
+    );
+
+
+    onClose();
+
+  };
+
+
   return (
-    <>
-      <section className="page-head">
+    <div
+      className="drawer-shade"
+      onClick={onClose}
+    >
 
-        <div>
+      <aside
+        className="detail"
+        onClick={(e) =>
+          e.stopPropagation()
+        }
+      >
 
-          <p className="eyebrow">
-            NEW RESOURCE
-          </p>
+        <button
+          className="close"
+          onClick={onClose}
+        >
+          <X />
+        </button>
 
-          <h1>
-            Add a resource
-          </h1>
 
-          <p className="lede">
-            Add hardware, software or equipment to your project inventory.
-          </p>
+        <p className="eyebrow">
+          NEW INVENTORY
+        </p>
 
-        </div>
 
-      </section>
+        <h2>
+          Add resource
+        </h2>
 
-      <section className="add-form">
+
+        <p>
+          Add a new item to the innovation centre inventory.
+        </p>
+
 
         <label>
+
           Resource name
 
           <input
-            defaultValue="ESP32 Dev Board"
+            value={name}
+            onChange={(e) =>
+              setName(
+                e.target.value
+              )
+            }
+            placeholder="e.g. Raspberry Pi 5"
           />
+
         </label>
 
-        <div className="form-grid">
-
-          <label>
-            Category
-
-            <select>
-              <option>
-                Hardware
-              </option>
-
-              <option>
-                Software
-              </option>
-            </select>
-
-          </label>
-
-          <label>
-            Quantity
-
-            <input
-              defaultValue="8"
-              type="number"
-            />
-          </label>
-
-        </div>
 
         <label>
+
+          Category
+
+          <select
+            value={category}
+            onChange={(e) =>
+              setCategory(
+                e.target.value as Category
+              )
+            }
+          >
+
+            <option value="Hardware">
+              Hardware
+            </option>
+
+            <option value="Software">
+              Software
+            </option>
+
+          </select>
+
+        </label>
+
+
+        <label>
+
+          Sub-category
+
+          <input
+            value={sub}
+            onChange={(e) =>
+              setSub(
+                e.target.value
+              )
+            }
+            placeholder="e.g. Development Board"
+          />
+
+        </label>
+
+
+        <label>
+
+          Quantity
+
+          <input
+            type="number"
+            min="0"
+            value={quantity}
+            onChange={(e) =>
+              setQuantity(
+                Math.max(
+                  0,
+                  Number(
+                    e.target.value
+                  )
+                )
+              )
+            }
+          />
+
+        </label>
+
+
+        <label>
+
           Location
 
           <input
-            defaultValue="Lab 204 · Shelf C"
+            value={location}
+            onChange={(e) =>
+              setLocation(
+                e.target.value
+              )
+            }
+            placeholder="e.g. Hardware Lab"
           />
+
         </label>
 
-        <div>
 
-          <button
-            className="secondary"
-            onClick={() => go('Inventory')}
-          >
-            Cancel
-          </button>
+        <button
+          className="primary full"
+          onClick={handleAdd}
+          disabled={
+            !name.trim()
+          }
+        >
+          Add resource
+          <Plus />
+        </button>
 
-          <button
-            className="primary"
-            onClick={onAdd}
-          >
-            Add resource
-            <ChevronRight />
-          </button>
+      </aside>
 
-        </div>
-
-      </section>
-    </>
+    </div>
   );
 }
 
 
+
+
+
 /* =========================================================
-   APP START
+   START APPLICATION
 ========================================================= */
 
 createRoot(
-  document.getElementById('root')!
+  document.getElementById(
+    'root'
+  )!
 ).render(
-  <App />
+
+  <React.StrictMode>
+
+    <App />
+
+  </React.StrictMode>
+
 );

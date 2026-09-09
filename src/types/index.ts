@@ -40,12 +40,21 @@ export interface Issue {
   id: string;
   resourceId: string;
   resourceName: string;
+
   userId: string;
   userName: string;
+
   profession: Profession;
+
   issuedAt: string;
+
   returnable: boolean;
+
   returnDate?: string;
+
   returnedAt?: string;
+
   status: IssueStatus;
+
+  quantity: number;
 }
