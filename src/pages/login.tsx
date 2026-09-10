@@ -11,9 +11,20 @@ interface LoginProps {
 }
 
 export default function Login({ onLogin }: LoginProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'Admin' | 'User'>('Admin');
+  const [email, setEmail] = useState('admin@deeptech.com');
+  const [password, setPassword] = useState('123456');
   const [error, setError] = useState('');
+
+  const handleRoleChange = (newRole: 'Admin' | 'User') => {
+    setRole(newRole);
+    setError('');
+    if (newRole === 'Admin') {
+      setEmail('admin@deeptech.com');
+    } else {
+      setEmail('user@deeptech.com');
+    }
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +35,11 @@ export default function Login({ onLogin }: LoginProps) {
 
     if (!user) {
       setError('Invalid email or password');
+      return;
+    }
+
+    if (user.role !== role) {
+      setError(`This account is registered as ${user.role}. Please select the ${user.role} tab.`);
       return;
     }
 
@@ -49,6 +65,23 @@ export default function Login({ onLogin }: LoginProps) {
         <p className="login-subtitle">
           Sign in to manage your innovation centre resources.
         </p>
+
+        <div className="login-role-toggle">
+          <button
+            type="button"
+            className={`login-role-btn ${role === 'Admin' ? 'active' : ''}`}
+            onClick={() => handleRoleChange('Admin')}
+          >
+            Admin
+          </button>
+          <button
+            type="button"
+            className={`login-role-btn ${role === 'User' ? 'active' : ''}`}
+            onClick={() => handleRoleChange('User')}
+          >
+            User
+          </button>
+        </div>
 
         <form onSubmit={handleLogin}>
 

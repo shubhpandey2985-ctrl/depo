@@ -118,6 +118,19 @@ function initializeUsers(): User[] {
   return users;
 }
 
+const MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+function getDefaultReturnDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = MONTH_NAMES[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
 
 function App() {
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
@@ -125,7 +138,6 @@ function App() {
   const [role, setRole] = useState<'Admin' | 'User'>(
     currentUser?.role || 'User'
   );
-
 
   const pageMap: Record<string, string> = {
     overview: 'Overview',
@@ -137,7 +149,6 @@ function App() {
     'add-resource': 'Add resource',
   };
 
-
   const [page, setPage] = useState(() => {
     const hash = window.location.hash
       .replace('#', '')
@@ -146,17 +157,14 @@ function App() {
     return pageMap[hash] || 'Overview';
   });
 
-
   const [profileOpen, setProfileOpen] = useState(false);
 
   const [editingResource, setEditingResource] =
     useState<Resource | null>(null);
 
-
   const [resources, setResources] = useState<Resource[]>(() =>
     initializeResources()
   );
-
 
   const [query, setQuery] = useState('');
 
@@ -169,7 +177,6 @@ function App() {
 
   const [toast, setToast] = useState('');
 
-
   // =========================================================
   // ISSUE STATE
   // =========================================================
@@ -178,7 +185,7 @@ function App() {
     name: '',
     profession: 'Student',
     returnable: true,
-    date: '20 Sep 2026',
+    date: getDefaultReturnDate(),
     quantity: 1,
   });
 
@@ -364,6 +371,7 @@ function App() {
     category: 'Hardware' | 'Software';
     quantity: number;
     location: string;
+    sub?: string;
   }) => {
 
     const cleanName = data.name.trim();
@@ -410,9 +418,10 @@ function App() {
       category: data.category,
 
       sub:
-        data.category === 'Hardware'
+        data.sub?.trim() ||
+        (data.category === 'Hardware'
           ? 'Hardware resource'
-          : 'Software resource',
+          : 'Software resource'),
 
       quantity: data.quantity,
 
@@ -724,7 +733,7 @@ function App() {
       name: '',
       profession: 'Student',
       returnable: true,
-      date: '20 Sep 2026',
+      date: getDefaultReturnDate(),
       quantity: 1,
     });
 
@@ -1030,6 +1039,7 @@ function App() {
         {page === 'Add resource' && (
           <AddResource
             onAdd={addItem}
+            onClose={() => go('Inventory')}
             go={go}
           />
         )}
@@ -2199,6 +2209,136 @@ function Details({
   );
 }
 
+/* =========================================================
+   RETURN DATE SELECTOR (DAY / MONTH / YEAR DROPDOWNS)
+========================================================= */
+
+interface ReturnDateSelectorProps {
+  value: string;
+  onChange: (dateStr: string) => void;
+}
+
+function ReturnDateSelector({ value, onChange }: ReturnDateSelectorProps) {
+  const today = useMemo(() => new Date(), []);
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+  const todayDay = today.getDate();
+
+  const parsed = useMemo(() => {
+    const parts = (value || '').trim().split(/\s+/);
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10);
+      const mIdx = MONTH_NAMES.findIndex(
+        (m) => m.toLowerCase() === parts[1].toLowerCase()
+      );
+      const y = parseInt(parts[2], 10);
+      if (!isNaN(d) && mIdx !== -1 && !isNaN(y)) {
+        return { day: d, month: mIdx, year: y };
+      }
+    }
+    const dt = new Date(value);
+    if (!isNaN(dt.getTime())) {
+      return { day: dt.getDate(), month: dt.getMonth(), year: dt.getFullYear() };
+    }
+    const def = new Date();
+    def.setDate(def.getDate() + 7);
+    return { day: def.getDate(), month: def.getMonth(), year: def.getFullYear() };
+  }, [value]);
+
+  const selectedYear = Math.max(todayYear, parsed.year);
+  const selectedMonth =
+    selectedYear === todayYear
+      ? Math.max(todayMonth, parsed.month)
+      : parsed.month;
+  const maxDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  const minDay =
+    selectedYear === todayYear && selectedMonth === todayMonth ? todayDay : 1;
+  const selectedDay = Math.min(maxDays, Math.max(minDay, parsed.day));
+
+  const years = useMemo(() => {
+    return Array.from({ length: 5 }, (_, i) => todayYear + i);
+  }, [todayYear]);
+
+  const availableMonths = useMemo(() => {
+    return MONTH_NAMES.map((name, index) => ({ name, index })).filter(
+      (m) => selectedYear > todayYear || m.index >= todayMonth
+    );
+  }, [selectedYear, todayYear, todayMonth]);
+
+  const availableDays = useMemo(() => {
+    const days: number[] = [];
+    for (let d = minDay; d <= maxDays; d++) {
+      days.push(d);
+    }
+    return days;
+  }, [minDay, maxDays]);
+
+  const updateDate = (newDay: number, newMonth: number, newYear: number) => {
+    const validYear = Math.max(todayYear, newYear);
+    const validMonth =
+      validYear === todayYear ? Math.max(todayMonth, newMonth) : newMonth;
+    const daysInNewMonth = new Date(validYear, validMonth + 1, 0).getDate();
+    const minD =
+      validYear === todayYear && validMonth === todayMonth ? todayDay : 1;
+    const validDay = Math.min(daysInNewMonth, Math.max(minD, newDay));
+
+    const dayStr = String(validDay).padStart(2, '0');
+    const monthStr = MONTH_NAMES[validMonth];
+    onChange(`${dayStr} ${monthStr} ${validYear}`);
+  };
+
+  return (
+    <div className="date-select-grid">
+      <div className="date-select-col">
+        <span className="date-select-sublabel">Day</span>
+        <select
+          value={selectedDay}
+          onChange={(e) =>
+            updateDate(Number(e.target.value), selectedMonth, selectedYear)
+          }
+        >
+          {availableDays.map((d) => (
+            <option key={d} value={d}>
+              {String(d).padStart(2, '0')}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="date-select-col">
+        <span className="date-select-sublabel">Month</span>
+        <select
+          value={selectedMonth}
+          onChange={(e) =>
+            updateDate(selectedDay, Number(e.target.value), selectedYear)
+          }
+        >
+          {availableMonths.map((m) => (
+            <option key={m.index} value={m.index}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="date-select-col">
+        <span className="date-select-sublabel">Year</span>
+        <select
+          value={selectedYear}
+          onChange={(e) =>
+            updateDate(selectedDay, selectedMonth, Number(e.target.value))
+          }
+        >
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
 
 /* =========================================================
    ISSUE RESOURCE
@@ -2550,13 +2690,12 @@ function Issue({
 
               Return date
 
-              <input
+              <ReturnDateSelector
                 value={issue.date}
-                onChange={(e) =>
+                onChange={(date) =>
                   setIssue({
                     ...issue,
-                    date:
-                      e.target.value,
+                    date,
                   })
                 }
               />
@@ -3806,128 +3945,125 @@ function EditResource({
           <X />
         </button>
 
-
         <p className="eyebrow">
           EDIT RESOURCE
         </p>
-
 
         <h2>
           Update resource
         </h2>
 
+        <p className="drawer-subtitle">
+          Update the item details in the innovation centre inventory.
+        </p>
 
-        <label>
+        <form
+          className="drawer-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSave();
+          }}
+        >
+          <label>
+            <span>Resource name</span>
+            <input
+              value={form.name}
+              onChange={(e) =>
+                update(
+                  'name',
+                  e.target.value
+                )
+              }
+              placeholder="e.g. Raspberry Pi 5"
+              required
+            />
+          </label>
 
-          Resource name
-
-          <input
-            value={form.name}
-            onChange={(e) =>
-              update(
-                'name',
-                e.target.value
-              )
-            }
-          />
-
-        </label>
-
-
-        <label>
-
-          Category
-
-          <select
-            value={form.category}
-            onChange={(e) =>
-              update(
-                'category',
-                e.target.value
-              )
-            }
-          >
-
-            <option value="Hardware">
-              Hardware
-            </option>
-
-            <option value="Software">
-              Software
-            </option>
-
-          </select>
-
-        </label>
-
-
-        <label>
-
-          Sub-category
-
-          <input
-            value={form.sub}
-            onChange={(e) =>
-              update(
-                'sub',
-                e.target.value
-              )
-            }
-          />
-
-        </label>
-
-
-        <label>
-
-          Quantity
-
-          <input
-            type="number"
-            min="0"
-            value={form.quantity}
-            onChange={(e) =>
-              update(
-                'quantity',
-                Math.max(
-                  0,
-                  Number(
+          <div className="drawer-form-grid">
+            <label>
+              <span>Category</span>
+              <select
+                value={form.category}
+                onChange={(e) =>
+                  update(
+                    'category',
                     e.target.value
                   )
-                )
-              )
-            }
-          />
+                }
+              >
+                <option value="Hardware">
+                  Hardware
+                </option>
+                <option value="Software">
+                  Software
+                </option>
+              </select>
+            </label>
 
-        </label>
+            <label>
+              <span>Sub-category</span>
+              <input
+                value={form.sub}
+                onChange={(e) =>
+                  update(
+                    'sub',
+                    e.target.value
+                  )
+                }
+                placeholder="e.g. Development Board"
+              />
+            </label>
+          </div>
 
+          <div className="drawer-form-grid">
+            <label>
+              <span>Quantity</span>
+              <input
+                type="number"
+                min="0"
+                value={form.quantity}
+                onChange={(e) =>
+                  update(
+                    'quantity',
+                    Math.max(
+                      0,
+                      Number(
+                        e.target.value
+                      )
+                    )
+                  )
+                }
+              />
+            </label>
 
-        <label>
+            <label>
+              <span>Location</span>
+              <input
+                value={
+                  form.location || ''
+                }
+                onChange={(e) =>
+                  update(
+                    'location',
+                    e.target.value
+                  )
+                }
+                placeholder="e.g. Hardware Lab"
+              />
+            </label>
+          </div>
 
-          Location
-
-          <input
-            value={
-              form.location || ''
-            }
-            onChange={(e) =>
-              update(
-                'location',
-                e.target.value
-              )
-            }
-          />
-
-        </label>
-
-
-        <button
-          className="primary full"
-          onClick={handleSave}
-        >
-          Save changes
-          <Check />
-        </button>
+          <div className="drawer-actions">
+            <button
+              type="submit"
+              className="primary full"
+              disabled={!form.name.trim()}
+            >
+              Save changes
+              <Check />
+            </button>
+          </div>
+        </form>
 
       </aside>
 
@@ -3943,6 +4079,8 @@ function EditResource({
 function AddResource({
   onAdded,
   onClose,
+  onAdd,
+  go,
 }: any) {
 
   const [name, setName] =
@@ -3960,6 +4098,13 @@ function AddResource({
   const [location, setLocation] =
     useState('');
 
+  const handleClose = () => {
+    if (onClose) {
+      onClose();
+    } else if (go) {
+      go('Inventory');
+    }
+  };
 
   const handleAdd = () => {
 
@@ -3967,6 +4112,16 @@ function AddResource({
       return;
     }
 
+    if (onAdd) {
+      onAdd({
+        name: name.trim(),
+        category,
+        sub: sub.trim(),
+        quantity: Math.max(1, quantity),
+        location: location.trim() || 'Innovation Centre',
+      });
+      return;
+    }
 
     const resource: Resource = {
 
@@ -3981,20 +4136,20 @@ function AddResource({
 
       sub:
         sub.trim() ||
-        'General',
+        (category === 'Hardware'
+          ? 'Hardware resource'
+          : 'Software resource'),
 
       quantity:
         Math.max(
-          0,
+          1,
           quantity
         ),
 
       status:
-        quantity <= 0
-          ? 'Unavailable'
-          : quantity <= 3
-            ? 'Low stock'
-            : 'Available',
+        quantity <= 3
+          ? 'Low stock'
+          : 'Available',
 
       tone:
         category ===
@@ -4015,12 +4170,13 @@ function AddResource({
       );
 
 
-    onAdded(
-      updated
-    );
+    if (onAdded) {
+      onAdded(
+        updated
+      );
+    }
 
-
-    onClose();
+    handleClose();
 
   };
 
@@ -4028,7 +4184,7 @@ function AddResource({
   return (
     <div
       className="drawer-shade"
-      onClick={onClose}
+      onClick={handleClose}
     >
 
       <aside
@@ -4039,138 +4195,127 @@ function AddResource({
       >
 
         <button
+          type="button"
           className="close"
-          onClick={onClose}
+          onClick={handleClose}
+          aria-label="Close"
         >
           <X />
         </button>
-
 
         <p className="eyebrow">
           NEW INVENTORY
         </p>
 
-
         <h2>
           Add resource
         </h2>
 
-
-        <p>
+        <p className="drawer-subtitle">
           Add a new item to the innovation centre inventory.
         </p>
 
+        <form
+          className="drawer-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleAdd();
+          }}
+        >
+          <label>
+            <span>Resource name</span>
+            <input
+              value={name}
+              onChange={(e) =>
+                setName(
+                  e.target.value
+                )
+              }
+              placeholder="e.g. Raspberry Pi 5"
+              required
+            />
+          </label>
 
-        <label>
+          <div className="drawer-form-grid">
+            <label>
+              <span>Category</span>
+              <select
+                value={category}
+                onChange={(e) =>
+                  setCategory(
+                    e.target.value as Category
+                  )
+                }
+              >
+                <option value="Hardware">
+                  Hardware
+                </option>
+                <option value="Software">
+                  Software
+                </option>
+              </select>
+            </label>
 
-          Resource name
-
-          <input
-            value={name}
-            onChange={(e) =>
-              setName(
-                e.target.value
-              )
-            }
-            placeholder="e.g. Raspberry Pi 5"
-          />
-
-        </label>
-
-
-        <label>
-
-          Category
-
-          <select
-            value={category}
-            onChange={(e) =>
-              setCategory(
-                e.target.value as Category
-              )
-            }
-          >
-
-            <option value="Hardware">
-              Hardware
-            </option>
-
-            <option value="Software">
-              Software
-            </option>
-
-          </select>
-
-        </label>
-
-
-        <label>
-
-          Sub-category
-
-          <input
-            value={sub}
-            onChange={(e) =>
-              setSub(
-                e.target.value
-              )
-            }
-            placeholder="e.g. Development Board"
-          />
-
-        </label>
-
-
-        <label>
-
-          Quantity
-
-          <input
-            type="number"
-            min="0"
-            value={quantity}
-            onChange={(e) =>
-              setQuantity(
-                Math.max(
-                  0,
-                  Number(
+            <label>
+              <span>Sub-category</span>
+              <input
+                value={sub}
+                onChange={(e) =>
+                  setSub(
                     e.target.value
                   )
-                )
-              )
-            }
-          />
+                }
+                placeholder="e.g. Development Board"
+              />
+            </label>
+          </div>
 
-        </label>
+          <div className="drawer-form-grid">
+            <label>
+              <span>Quantity</span>
+              <input
+                type="number"
+                min="1"
+                value={quantity}
+                onChange={(e) =>
+                  setQuantity(
+                    Math.max(
+                      1,
+                      Number(
+                        e.target.value
+                      )
+                    )
+                  )
+                }
+                required
+              />
+            </label>
 
+            <label>
+              <span>Location</span>
+              <input
+                value={location}
+                onChange={(e) =>
+                  setLocation(
+                    e.target.value
+                  )
+                }
+                placeholder="e.g. Hardware Lab"
+              />
+            </label>
+          </div>
 
-        <label>
-
-          Location
-
-          <input
-            value={location}
-            onChange={(e) =>
-              setLocation(
-                e.target.value
-              )
-            }
-            placeholder="e.g. Hardware Lab"
-          />
-
-        </label>
-
-
-        <button
-          className="primary full"
-          onClick={handleAdd}
-          disabled={
-            !name.trim()
-          }
-        >
-          Add resource
-          <Plus />
-        </button>
+          <div className="drawer-actions">
+            <button
+              type="submit"
+              className="primary full"
+              disabled={!name.trim()}
+            >
+              Add resource
+              <Plus />
+            </button>
+          </div>
+        </form>
 
       </aside>
 
