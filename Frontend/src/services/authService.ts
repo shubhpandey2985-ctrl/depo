@@ -1,4 +1,4 @@
-import type { Role } from '../types';
+import type { Role } from '../types/domain';
 
 const AUTH_KEY = 'deeptech_auth';
 

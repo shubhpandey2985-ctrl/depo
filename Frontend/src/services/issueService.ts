@@ -1,10 +1,10 @@
-import type { Issue, Resource, ResourceStatus } from '../types';
+import type { Issue, Resource, ResourceStatus } from '../types/domain';
 import {
   getIssues,
   saveIssues,
   getResources,
   saveResources,
-} from '../storage/localStorage';
+} from '../lib/storage/localStorage';
 
 function isPastReturnDate(returnDate?: string) {
   if (!returnDate) return false;
@@ -101,3 +101,4 @@ export function returnIssue(issueId: string): Issue[] {
 
   return updatedIssues;
 }
+

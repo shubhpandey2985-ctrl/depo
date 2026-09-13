@@ -1,4 +1,12 @@
-node_modules/
-dist/
-.npm-cache/
+# Dependencies and build artifacts
+**/node_modules/
+**/dist/
+**/.npm-cache/
+**/*.tsbuildinfo
+
+# Local environment files
+**/.env
+**/.env.*
+!**/.env.example
+
 *.log

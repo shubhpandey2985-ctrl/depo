@@ -1,6 +1,6 @@
-import type { User } from '../types';
-import { getUsers, saveUsers } from '../storage/localStorage';
-import { seedUsers } from '../data/seedData';
+import type { User } from '../types/domain';
+import { getUsers, saveUsers } from '../lib/storage/localStorage';
+import { seedUsers } from '../features/inventory/data/seedData';
 
 export function initializeUsers(): User[] {
   const existing = getUsers();

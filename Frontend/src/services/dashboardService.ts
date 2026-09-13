@@ -1,6 +1,6 @@
-import { getResources } from '../storage/localStorage';
-import { getIssues } from '../storage/localStorage';
-import { getUsers } from '../storage/localStorage';
+import { getResources } from '../lib/storage/localStorage';
+import { getIssues } from '../lib/storage/localStorage';
+import { getUsers } from '../lib/storage/localStorage';
 
 export function getDashboardStats() {
   const resources = getResources();

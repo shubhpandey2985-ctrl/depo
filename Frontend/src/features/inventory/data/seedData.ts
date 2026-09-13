@@ -1,4 +1,4 @@
-import type { Issue, Resource, User } from '../types';
+import type { Issue, Resource, User } from '../../../types/domain';
 
 export const seedResources: Resource[] = [
   {

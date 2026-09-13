@@ -1,6 +1,6 @@
-import type { Resource } from '../types';
-import { getResources, saveResources } from '../storage/localStorage';
-import { seedResources } from '../data/seedData';
+import type { Resource } from '../types/domain';
+import { getResources, saveResources } from '../lib/storage/localStorage';
+import { seedResources } from '../features/inventory/data/seedData';
 
 export function initializeResources(): Resource[] {
   const existing = getResources();

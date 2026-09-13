@@ -1,8 +1,7 @@
 /// <reference types="vite/client" />
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
-import './styles.css';
+import '../styles/global.css';
 
 import {
   Activity,
@@ -40,7 +39,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
-import Login from './pages/login';
+import Login from '../features/auth/Login';
 
 import type {
   Resource,
@@ -49,34 +48,34 @@ import type {
   Profession,
   Role,
   Category,
-} from './types';
+} from '../types/domain';
 
 import {
   initializeResources,
   addResource,
   updateResource,
   getAllResources,
-} from './services/resourceService';
+} from '../services/resourceService';
 
 import {
   createIssue,
   getAllIssues,
   returnIssue,
   syncOverdueIssues,
-} from './services/issueService';
+} from '../services/issueService';
 
 import {
   getCurrentUser,
   logout,
   type AuthUser,
-} from './services/authService';
+} from '../services/authService';
 
 import {
   getUsers,
   saveUsers,
   getResources,
   saveResources,
-} from './storage/localStorage';
+} from '../lib/storage/localStorage';
 
 const nav = [
   { label: 'Overview', icon: LayoutDashboard },
@@ -4327,20 +4326,6 @@ function AddResource({
 
 
 
-/* =========================================================
-   START APPLICATION
-========================================================= */
 
-createRoot(
-  document.getElementById(
-    'root'
-  )!
-).render(
+export default App;
 
-  <React.StrictMode>
-
-    <App />
-
-  </React.StrictMode>
-
-);
