@@ -32,3 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 Backend/deeptech-backend/src/main/resources/application-local.properties
+
+# Local Spring configuration / secrets
+**/src/main/resources/application-local.properties

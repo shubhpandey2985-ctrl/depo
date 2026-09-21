@@ -3,41 +3,59 @@ package com.deeptech.backend.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(name = "categories")
+@Table(
+    name = "categories",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_category_name_parent",
+            columnNames = {"name", "parent_id"}
+        )
+    }
+)
 public class Category {
 
-    // Primary key of the category table.
-    // MySQL will automatically generate this ID.
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Name of the category, for example:
-    // "Electronics", "Networking", "Lab Equipment"
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String name;
 
-    // Empty constructor required by JPA/Hibernate.
+    // Null means this is a top-level category.
+    // Example: Hardware, Software
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private Category parent;
+
     public Category() {
     }
 
-    // Constructor useful when creating a new category in Java.
     public Category(String name) {
         this.name = name;
     }
 
-    // Returns the category ID.
+    public Category(String name, Category parent) {
+        this.name = name;
+        this.parent = parent;
+    }
+
     public Long getId() {
         return id;
     }
 
-    // Returns the category name.
     public String getName() {
         return name;
     }
 
-    // Changes the category name.
     public void setName(String name) {
         this.name = name;
+    }
+
+    public Category getParent() {
+        return parent;
+    }
+
+    public void setParent(Category parent) {
+        this.parent = parent;
     }
 }

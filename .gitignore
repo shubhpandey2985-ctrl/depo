@@ -10,3 +10,6 @@
 !**/.env.example
 
 *.log
+
+# Editor settings
+.vscode/
