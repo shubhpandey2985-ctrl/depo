@@ -1,104 +1,108 @@
-import type { Issue, Resource, ResourceStatus } from '../types/domain';
+import type { Issue } from '../types/domain';
 import {
-  getIssues,
-  saveIssues,
-  getResources,
-  saveResources,
-} from '../lib/storage/localStorage';
+  getIssuesApi,
+  getIssueApi,
+  getIssuesByUserApi,
+  getIssuesByResourceApi,
+  getIssuesByStatusApi,
+  createIssueApi,
+  returnIssueApi,
+  deleteIssueApi,
+} from './api';
 
-function isPastReturnDate(returnDate?: string) {
-  if (!returnDate) return false;
-
-  const parsed = new Date(returnDate);
-  if (Number.isNaN(parsed.getTime())) return false;
-
-  const endOfReturnDay = new Date(parsed);
-  endOfReturnDay.setHours(23, 59, 59, 999);
-
-  return endOfReturnDay.getTime() < Date.now();
+function mapIssue(data: any): Issue {
+  return {
+    id: String(data.id),
+    resourceId: String(data.resourceId),
+    resourceName: data.resourceName ?? '',
+    userId: String(data.userId),
+    userName: data.userName ?? '',
+    profession: data.profession ?? '',
+    issuedAt: data.issuedAt,
+    returnable: data.returnable === true,
+    returnDate: data.returnDate ?? undefined,
+    returnedAt: data.returnedAt ?? undefined,
+    status: data.status,
+    quantity: data.quantity ?? 1,
+  };
 }
 
-export function getAllIssues(): Issue[] {
-  return getIssues();
+export async function getAllIssues(): Promise<Issue[]> {
+  const data = await getIssuesApi();
+  return data.map(mapIssue);
 }
 
-export function syncOverdueIssues(): Issue[] {
-  const issues = getIssues();
-  let changed = false;
-
-  const updatedIssues = issues.map((issue) => {
-    if (
-      issue.status === 'Issued' &&
-      issue.returnable &&
-      isPastReturnDate(issue.returnDate)
-    ) {
-      changed = true;
-      return { ...issue, status: 'Overdue' as const };
-    }
-
-    return issue;
-  });
-
-  if (changed) saveIssues(updatedIssues);
-
-  return updatedIssues;
+export async function getIssueById(
+  issueId: string
+): Promise<Issue> {
+  const data = await getIssueApi(issueId);
+  return mapIssue(data);
 }
 
-export function createIssue(issue: Issue): Issue[] {
-  const issues = getIssues();
-  const resources = getResources();
-  const updatedIssues = [...issues, issue];
-
-  const updatedResources: Resource[] = resources.map((resource): Resource => {
-    if (resource.id !== issue.resourceId) return resource;
-
-    const newQuantity = Math.max(0, resource.quantity - 1);
-    const newStatus: ResourceStatus =
-      newQuantity === 0
-        ? 'Unavailable'
-        : newQuantity <= 3
-          ? 'Low stock'
-          : 'Available';
-
-    return { ...resource, quantity: newQuantity, status: newStatus };
-  });
-
-  saveIssues(updatedIssues);
-  saveResources(updatedResources);
-
-  return updatedIssues;
+export async function getIssuesByUser(
+  userId: string
+): Promise<Issue[]> {
+  const data = await getIssuesByUserApi(userId);
+  return data.map(mapIssue);
 }
 
-export function returnIssue(issueId: string): Issue[] {
-  const issues = getIssues();
-  const resources = getResources();
-  const issue = issues.find((item) => item.id === issueId);
+export async function getIssuesByResource(
+  resourceId: string
+): Promise<Issue[]> {
+  const data = await getIssuesByResourceApi(resourceId);
+  return data.map(mapIssue);
+}
 
-  if (!issue || issue.status === 'Returned') return issues;
+export async function getIssuesByStatus(
+  status: string
+): Promise<Issue[]> {
+  const data = await getIssuesByStatusApi(status);
+  return data.map(mapIssue);
+}
 
-  const updatedIssues = issues.map((item) =>
-    item.id === issueId
-      ? {
-          ...item,
-          status: 'Returned' as const,
-          returnedAt: new Date().toISOString(),
-        }
-      : item
+export async function createIssue(
+  issue: Issue
+): Promise<Issue> {
+
+  const created = await createIssueApi(
+    {
+      issuedAt: issue.issuedAt,
+      returnable: issue.returnable,
+      returnDate: issue.returnDate,
+      quantity: issue.quantity,
+    },
+    issue.userId,
+    issue.resourceId
   );
 
-  const updatedResources: Resource[] = resources.map((resource): Resource =>
-    resource.id === issue.resourceId
-      ? {
-          ...resource,
-          quantity: resource.quantity + 1,
-          status: 'Available',
-        }
-      : resource
-  );
-
-  saveIssues(updatedIssues);
-  saveResources(updatedResources);
-
-  return updatedIssues;
+  return mapIssue(created);
 }
 
+export async function returnIssue(
+  issueId: string
+): Promise<Issue> {
+
+  const returned = await returnIssueApi(issueId);
+
+  return mapIssue(returned);
+}
+
+export async function deleteIssue(
+  issueId: string
+): Promise<void> {
+
+  await deleteIssueApi(issueId);
+}
+
+export async function syncOverdueIssues(): Promise<Issue[]> {
+  /*
+   * The backend automatically updates overdue issues
+   * when dashboard/issue data is requested.
+   *
+   * We therefore fetch the latest issue data instead
+   * of modifying localStorage.
+   */
+  const data = await getIssuesApi();
+
+  return data.map(mapIssue);
+}

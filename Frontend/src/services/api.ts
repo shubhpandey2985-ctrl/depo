@@ -244,21 +244,31 @@ export async function deleteResourceApi(
   );
 }
 
-/* =========================
-   ISSUES
-========================= */
+/* ISSUES */
 
 export async function getIssuesApi() {
+  return request<any[]>('/issues');
+}
+
+export async function getIssueApi(id: string) {
+  return request<any>(`/issues/${id}`);
+}
+
+export async function getIssuesByUserApi(userId: string) {
   return request<any[]>(
-    '/issues'
+    `/issues/user/${encodeURIComponent(userId)}`
   );
 }
 
-export async function getIssueApi(
-  id: string
-) {
-  return request<any>(
-    `/issues/${id}`
+export async function getIssuesByResourceApi(resourceId: string) {
+  return request<any[]>(
+    `/issues/resource/${encodeURIComponent(resourceId)}`
+  );
+}
+
+export async function getIssuesByStatusApi(status: string) {
+  return request<any[]>(
+    `/issues/status/${encodeURIComponent(status)}`
   );
 }
 
@@ -268,11 +278,7 @@ export async function createIssueApi(
   resourceId: string
 ) {
   return request<any>(
-    `/issues?userId=${encodeURIComponent(
-      userId
-    )}&resourceId=${encodeURIComponent(
-      resourceId
-    )}`,
+    `/issues?userId=${encodeURIComponent(userId)}&resourceId=${encodeURIComponent(resourceId)}`,
     {
       method: 'POST',
       body: JSON.stringify(issue),
@@ -280,28 +286,23 @@ export async function createIssueApi(
   );
 }
 
-export async function returnIssueApi(
-  id: string
-) {
+export async function returnIssueApi(id: string) {
   return request<any>(
-    `/issues/${id}/return`,
+    `/issues/${encodeURIComponent(id)}/return`,
     {
       method: 'PUT',
     }
   );
 }
 
-export async function deleteIssueApi(
-  id: string
-) {
+export async function deleteIssueApi(id: string) {
   return request<void>(
-    `/issues/${id}`,
+    `/issues/${encodeURIComponent(id)}`,
     {
       method: 'DELETE',
     }
   );
 }
-
 /* =========================
    DASHBOARD
 ========================= */

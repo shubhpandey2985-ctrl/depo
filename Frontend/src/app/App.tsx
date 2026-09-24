@@ -68,9 +68,6 @@ import {
   returnIssueApi,
 } from '../services/api';
 
-import {
-  getAllIssues,
-} from '../services/issueService';
 
 import {
   getCurrentUser,
@@ -219,6 +216,9 @@ function App() {
   const [resources, setResources] =
     useState<Resource[]>([]);
 
+  const [issues, setIssues] =
+    useState<Issue[]>([]);
+
   const [dashboard, setDashboard] = useState({
     totalItems: 0,
     availableItems: 0,
@@ -319,6 +319,32 @@ function App() {
     };
 
     loadResources();
+  }, [currentUser]);
+
+
+  // =========================================================
+  // LOAD ISSUES FROM BACKEND
+  // =========================================================
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadIssues = async () => {
+      try {
+        const data = await getIssuesApi();
+
+        setIssues(
+          data.map(mapBackendIssue)
+        );
+      } catch (error) {
+        console.error(
+          'Failed to load issues from backend:',
+          error
+        );
+      }
+    };
+
+    loadIssues();
   }, [currentUser]);
 
 
@@ -598,8 +624,6 @@ if (
       return;
     }
 
-    const issues = getAllIssues();
-
     const hasActiveIssue = issues.some(
       (item) =>
         String(item.resourceId) === String(resource.id) &&
@@ -831,6 +855,13 @@ if (
         },
         String(recipient.id),
         selected.id
+      );
+
+      // Refresh issues from MySQL.
+      const issueData = await getIssuesApi();
+
+      setIssues(
+        issueData.map(mapBackendIssue)
       );
 
       // Refresh inventory from MySQL so the quantity shown in the UI
@@ -1084,7 +1115,7 @@ if (
             go={go}
             setSelected={setSelected}
             resources={resources}
-            issues={getAllIssues()}
+            issues={issues}
             dashboard={dashboard}
           />
         )}
@@ -1135,6 +1166,9 @@ if (
             onResourcesChange={
               setResources
             }
+            onIssuesChange={
+              setIssues
+            }
           />
         )}
 
@@ -1155,7 +1189,7 @@ if (
         {page === 'Insights' && (
           <Insights
   resources={resources}
-  issues={getAllIssues()}
+  issues={issues}
 />
         )}
 
@@ -1181,6 +1215,7 @@ if (
           page !== 'Issue resource' && (
             <Details
               resource={selected}
+              issues={issues}
               onIssue={() =>
                 go('Issue resource')
               }
@@ -1236,7 +1271,7 @@ function Overview({
   go: (x: string) => void;
   setSelected: (r: Resource) => void;
   resources: Resource[];
-  issues: ReturnType<typeof getAllIssues>;
+  issues: Issue[];
   dashboard: {
     totalItems: number;
     availableItems: number;
@@ -2130,9 +2165,15 @@ function Inventory({
 
 function Details({
   resource,
+  issues,
   onIssue,
   onClose,
-}: any) {
+}: {
+  resource: Resource;
+  issues: Issue[];
+  onIssue: () => void;
+  onClose: () => void;
+}){
   return (
     <div
       className="drawer-shade"
@@ -2205,7 +2246,7 @@ function Details({
           <span>
             Issued
             <b>
-              {getAllIssues()
+              {issues
                 .filter(
                   (issue) =>
                     issue.resourceId ===
@@ -2879,9 +2920,12 @@ function Issue({
 
 function History({
   onResourcesChange,
+  onIssuesChange,
 }: {
   onResourcesChange:
     (resources: Resource[]) => void;
+  onIssuesChange:
+    (issues: Issue[]) => void;
 }) {
 
   const [issues, setIssues] =
@@ -2992,8 +3036,15 @@ function History({
         getResourcesApi(),
       ]);
 
-      setIssues(issueData.map(mapBackendIssue));
-      onResourcesChange(resourceData.map(mapBackendResource));
+      const updatedIssues =
+        issueData.map(mapBackendIssue);
+
+      setIssues(updatedIssues);
+      onIssuesChange(updatedIssues);
+
+      onResourcesChange(
+        resourceData.map(mapBackendResource)
+      );
     } catch (error) {
       console.error('Failed to return resource:', error);
 
