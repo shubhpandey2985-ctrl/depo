@@ -134,39 +134,25 @@ export default function ChangePassword({
 
   return (
     <div className="login-page">
-
       <div className="login-card">
-
-        <div className="login-header">
-
-          <div className="login-icon">
-            <Sparkles size={24} />
-          </div>
-
-          <h1>
-            Change your password
-          </h1>
-
-          <p>
-            Your account was created with
-            a temporary password.
-          </p>
-
-          <p>
-            Please create a new password
-            before continuing.
-          </p>
-
+        <div className="login-brand">
+          <div>DeepTech</div>
+          <span>INNOVATION CENTRE</span>
         </div>
 
+        <div className="login-icon">
+          <Sparkles />
+        </div>
+
+        <h1>Change your password</h1>
+
+        <p className="login-subtitle">
+          Your account was created with a temporary password. Please create a new password before continuing.
+        </p>
+
         <form onSubmit={handleSubmit}>
-
-          <div className="form-group">
-
-            <label htmlFor="new-password">
-              New password
-            </label>
-
+          <label>
+            New password
             <input
               id="new-password"
               type="password"
@@ -180,15 +166,10 @@ export default function ChangePassword({
               disabled={loading}
               required
             />
+          </label>
 
-          </div>
-
-          <div className="form-group">
-
-            <label htmlFor="confirm-password">
-              Confirm new password
-            </label>
-
+          <label>
+            Confirm new password
             <input
               id="confirm-password"
               type="password"
@@ -202,29 +183,25 @@ export default function ChangePassword({
               disabled={loading}
               required
             />
-
-          </div>
+          </label>
 
           {error && (
-            <div className="login-error">
+            <p className="login-error">
               {error}
-            </div>
+            </p>
           )}
 
           <button
             type="submit"
-            className="login-button"
+            className="primary login-button"
             disabled={loading}
           >
             {loading
               ? 'Changing password...'
               : 'Change password'}
           </button>
-
         </form>
-
       </div>
-
     </div>
   );
 }
