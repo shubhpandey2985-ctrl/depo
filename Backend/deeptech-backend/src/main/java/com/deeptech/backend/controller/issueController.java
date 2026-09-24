@@ -13,68 +13,86 @@ public class issueController {
 
     private final issueService issueService;
 
-    public issueController(issueService issueService) {
+    public issueController(
+            issueService issueService) {
+
         this.issueService = issueService;
     }
 
-    // Get all issue records.
+    // Get all issues
     @GetMapping
     public List<issue> getAllIssues() {
+
         return issueService.getAllIssues();
     }
 
-    // Get one issue by ID.
+    // Get one issue
     @GetMapping("/{id}")
-    public issue getIssueById(@PathVariable Long id) {
+    public issue getIssueById(
+            @PathVariable Long id) {
+
         return issueService.getIssueById(id);
     }
 
-    // Get issues belonging to a particular user.
+    // Get issues belonging to one user
     @GetMapping("/user/{userId}")
-    public List<issue> getIssuesByUser(@PathVariable Long userId) {
-        return issueService.getIssuesByUser(userId);
+    public List<issue> getIssuesByUser(
+            @PathVariable Long userId) {
+
+        return issueService.getIssuesByUser(
+                userId
+        );
     }
 
-    // Get issues involving a particular resource.
+    // Get issues for one resource
     @GetMapping("/resource/{resourceId}")
-    public List<issue> getIssuesByResource(@PathVariable Long resourceId) {
-        return issueService.getIssuesByResource(resourceId);
+    public List<issue> getIssuesByResource(
+            @PathVariable Long resourceId) {
+
+        return issueService.getIssuesByResource(
+                resourceId
+        );
     }
 
-    // Filter issues by status.
+    // Get issues by status
     @GetMapping("/status/{status}")
-    public List<issue> getIssuesByStatus(@PathVariable String status) {
-        return issueService.getIssuesByStatus(status);
+    public List<issue> getIssuesByStatus(
+            @PathVariable String status) {
+
+        return issueService.getIssuesByStatus(
+                status
+        );
     }
 
-    // Create an issue record.
-    //
-    // Example:
-    // POST /api/issues?userId=1&resourceId=1
+    // Create an issue
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public issue createIssue(
-            @RequestBody issue issue,
+            @RequestBody issue newIssue,
             @RequestParam Long userId,
             @RequestParam Long resourceId) {
 
         return issueService.createIssue(
-                issue,
+                newIssue,
                 userId,
                 resourceId
         );
     }
 
-    // Mark an issued resource as returned.
+    // Return a resource
     @PutMapping("/{id}/return")
-    public issue returnIssue(@PathVariable Long id) {
+    public issue returnIssue(
+            @PathVariable Long id) {
+
         return issueService.returnIssue(id);
     }
 
-    // Delete an issue record.
+    // Delete an issue
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void deleteIssue(@PathVariable Long id) {
+    public void deleteIssue(
+            @PathVariable Long id) {
+
         issueService.deleteIssue(id);
     }
 }

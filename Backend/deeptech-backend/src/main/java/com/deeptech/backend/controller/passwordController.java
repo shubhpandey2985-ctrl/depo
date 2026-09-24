@@ -2,6 +2,8 @@ package com.deeptech.backend.controller;
 
 import com.deeptech.backend.entity.user;
 import com.deeptech.backend.repository.userRepository;
+import com.deeptech.backend.service.auditLogService;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,38 +13,42 @@ public class passwordController {
 
     private final userRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final auditLogService auditLogService;
 
     public passwordController(
             userRepository userRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            auditLogService auditLogService) {
 
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.auditLogService = auditLogService;
     }
 
     @PostMapping("/change-password")
     public user changePassword(
-            @RequestBody ChangePasswordRequest request) {
+            @RequestBody ChangePasswordRequest request,
+            Authentication authentication) {
+
+        if (authentication == null
+                || !authentication.isAuthenticated()) {
+
+            throw new RuntimeException(
+                    "Authentication is required"
+            );
+        }
+
+        String loggedInEmail =
+                authentication.getName();
 
         user currentUser =
                 userRepository
-                        .findByEmail(request.email())
+                        .findByEmail(loggedInEmail)
                         .orElseThrow(() ->
                                 new RuntimeException(
                                         "User not found"
                                 ));
 
-        // Verify the current/temporary password.
-        if (!passwordEncoder.matches(
-                request.currentPassword(),
-                currentUser.getPassword())) {
-
-            throw new RuntimeException(
-                    "Current password is incorrect"
-            );
-        }
-
-        // Basic password validation.
         if (request.newPassword() == null
                 || request.newPassword().isBlank()) {
 
@@ -58,22 +64,39 @@ public class passwordController {
             );
         }
 
-        // Store the new password as a BCrypt hash.
+        if (passwordEncoder.matches(
+                request.newPassword(),
+                currentUser.getPassword())) {
+
+            throw new RuntimeException(
+                    "New password must be different from the current password"
+            );
+        }
+
         currentUser.setPassword(
                 passwordEncoder.encode(
                         request.newPassword()
                 )
         );
 
-        // User has successfully changed the temporary password.
         currentUser.setMustChangePassword(false);
 
-        return userRepository.save(currentUser);
+        user savedUser =
+                userRepository.save(currentUser);
+
+        auditLogService.log(
+                "PASSWORD_CHANGE",
+                "USER",
+                savedUser.getId(),
+                "Password changed for user: "
+                        + savedUser.getEmail()
+        );
+
+        return savedUser;
     }
 
     public record ChangePasswordRequest(
-            String email,
-            String currentPassword,
             String newPassword
-    ) {}
+    ) {
+    }
 }

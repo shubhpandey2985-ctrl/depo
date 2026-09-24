@@ -21,6 +21,7 @@ public class resourceService {
     }
 
     public List<resource> getAllResources() {
+
         return resourceRepository.findAll();
     }
 
@@ -35,6 +36,7 @@ public class resourceService {
 
     public resource createResource(resource newResource) {
 
+        validateResource(newResource);
         validateQuantity(newResource.getQuantity());
 
         updateStatus(newResource);
@@ -46,7 +48,8 @@ public class resourceService {
                 "CREATE",
                 "RESOURCE",
                 savedResource.getId(),
-                "Created resource: " + savedResource.getName()
+                "Created resource: "
+                        + savedResource.getName()
         );
 
         return savedResource;
@@ -59,6 +62,7 @@ public class resourceService {
         resource existingResource =
                 getResourceById(id);
 
+        validateResource(resourceDetails);
         validateQuantity(resourceDetails.getQuantity());
 
         existingResource.setName(
@@ -115,13 +119,43 @@ public class resourceService {
                 "DELETE",
                 "RESOURCE",
                 id,
-                "Deleted resource: " + resourceName
+                "Deleted resource: "
+                        + resourceName
         );
     }
 
-    private void validateQuantity(Integer quantity) {
+    private void validateResource(
+            resource resource) {
 
-        if (quantity == null || quantity < 0) {
+        if (resource == null) {
+
+            throw new RuntimeException(
+                    "Resource data cannot be empty"
+            );
+        }
+
+        if (resource.getName() == null
+                || resource.getName().isBlank()) {
+
+            throw new RuntimeException(
+                    "Resource name cannot be empty"
+            );
+        }
+
+        if (resource.getCategory() == null
+                || resource.getCategory().isBlank()) {
+
+            throw new RuntimeException(
+                    "Resource category cannot be empty"
+            );
+        }
+    }
+
+    private void validateQuantity(
+            Integer quantity) {
+
+        if (quantity == null
+                || quantity < 0) {
 
             throw new RuntimeException(
                     "Resource quantity cannot be negative"
@@ -129,15 +163,20 @@ public class resourceService {
         }
     }
 
-    private void updateStatus(resource resource) {
+    private void updateStatus(
+            resource resource) {
 
         if (resource.getQuantity() == 0) {
 
-            resource.setStatus("Unavailable");
+            resource.setStatus(
+                    "Unavailable"
+            );
 
         } else {
 
-            resource.setStatus("Available");
+            resource.setStatus(
+                "Available"
+        );
         }
     }
 }

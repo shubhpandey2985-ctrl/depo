@@ -3,24 +3,44 @@ import { login } from '../../services/authService';
 import { Sparkles } from 'lucide-react';
 
 interface LoginProps {
-  onLogin: (user: {
-    id: string;
-    name: string;
-    email: string;
-    profession: string;
-    role: 'Admin' | 'User';
-  }) => void;
+  onLogin: (
+    user: {
+      id: string;
+      name: string;
+      email: string;
+      profession: string;
+      role: 'Admin' | 'User';
+      mustChangePassword: boolean;
+    },
+    password: string
+  ) => void;
 }
 
-export default function Login({ onLogin }: LoginProps) {
-  const [role, setRole] = useState<'Admin' | 'User'>('Admin');
-  const [email, setEmail] = useState('admin@deeptech.com');
-  const [password, setPassword] = useState('123456');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function Login({
+  onLogin,
+}: LoginProps) {
 
-  const handleRoleChange = (newRole: 'Admin' | 'User') => {
+  const [role, setRole] =
+    useState<'Admin' | 'User'>('Admin');
+
+  const [email, setEmail] =
+    useState('admin@deeptech.com');
+
+  const [password, setPassword] =
+    useState('123456');
+
+  const [error, setError] =
+    useState('');
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const handleRoleChange = (
+    newRole: 'Admin' | 'User'
+  ) => {
+
     setRole(newRole);
+
     setError('');
 
     if (newRole === 'Admin') {
@@ -28,19 +48,28 @@ export default function Login({ onLogin }: LoginProps) {
     } else {
       setEmail('');
     }
+
+    setPassword('');
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (
+    e: React.FormEvent
+  ) => {
+
     e.preventDefault();
 
     setError('');
     setLoading(true);
 
     try {
-      const user = await login(email, password);
+
+      const user =
+        await login(email, password);
 
       if (!user) {
-        setError('Invalid email or password');
+        setError(
+          'Invalid email or password'
+        );
         return;
       }
 
@@ -51,11 +80,24 @@ export default function Login({ onLogin }: LoginProps) {
         return;
       }
 
-      onLogin(user);
+      // Pass the authenticated user and
+      // password to App.tsx for the
+      // temporary-password change flow.
+      onLogin(user, password);
+
     } catch (error) {
-      console.error('Login failed:', error);
-      setError('Unable to connect to the backend.');
+
+      console.error(
+        'Login failed:',
+        error
+      );
+
+      setError(
+        'Unable to connect to the backend.'
+      );
+
     } finally {
+
       setLoading(false);
     }
   };
@@ -65,39 +107,48 @@ export default function Login({ onLogin }: LoginProps) {
 
       <div className="login-card">
 
-        <div className="login-brand">
-          <div>DeepTech</div>
-          <span>innovation centre</span>
+        <div className="login-header">
+
+          <div className="login-icon">
+            <Sparkles size={24} />
+          </div>
+
+          <h1>
+            DeepTech
+          </h1>
+
+          <p>
+            Innovation Centre
+          </p>
+
         </div>
 
-        <div className="login-icon">
-          <Sparkles />
-        </div>
-
-        <h1>Welcome back</h1>
-
-        <p className="login-subtitle">
-          Sign in to manage your innovation centre resources.
-        </p>
-
-        <div className="login-role-toggle">
+        <div className="login-role-tabs">
 
           <button
             type="button"
-            className={`login-role-btn ${
-              role === 'Admin' ? 'active' : ''
-            }`}
-            onClick={() => handleRoleChange('Admin')}
+            className={
+              role === 'Admin'
+                ? 'active'
+                : ''
+            }
+            onClick={() =>
+              handleRoleChange('Admin')
+            }
           >
             Admin
           </button>
 
           <button
             type="button"
-            className={`login-role-btn ${
-              role === 'User' ? 'active' : ''
-            }`}
-            onClick={() => handleRoleChange('User')}
+            className={
+              role === 'User'
+                ? 'active'
+                : ''
+            }
+            onClick={() =>
+              handleRoleChange('User')
+            }
           >
             User
           </button>
@@ -106,42 +157,60 @@ export default function Login({ onLogin }: LoginProps) {
 
         <form onSubmit={handleLogin}>
 
-          <label>
-            Email
+          <div className="form-group">
+
+            <label htmlFor="login-email">
+              Email
+            </label>
 
             <input
+              id="login-email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) =>
+                setEmail(e.target.value)
+              }
               placeholder="Enter your email"
               required
+              disabled={loading}
             />
-          </label>
 
-          <label>
-            Password
+          </div>
+
+          <div className="form-group">
+
+            <label htmlFor="login-password">
+              Password
+            </label>
 
             <input
+              id="login-password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
               placeholder="Enter your password"
               required
+              disabled={loading}
             />
-          </label>
+
+          </div>
 
           {error && (
-            <p className="login-error">
+            <div className="login-error">
               {error}
-            </p>
+            </div>
           )}
 
           <button
             type="submit"
-            className="primary login-button"
+            className="login-button"
             disabled={loading}
           >
-            {loading ? 'Signing in...' : 'Sign in'}
+            {loading
+              ? 'Signing in...'
+              : 'Sign in'}
           </button>
 
         </form>

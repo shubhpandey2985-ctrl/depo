@@ -11,7 +11,6 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-
 import org.springframework.web.cors.CorsConfiguration;
 
 import java.util.List;
@@ -49,17 +48,19 @@ public class SecurityConfig {
 
         http.csrf(csrf -> csrf.disable());
 
-        /*
-         * Frontend runs on localhost:5173
-         * Backend runs on localhost:8080
-         */
         http.cors(cors -> cors.configurationSource(request -> {
 
             CorsConfiguration config =
                     new CorsConfiguration();
 
+            String frontendUrl =
+                    System.getenv().getOrDefault(
+                            "FRONTEND_URL",
+                            "http://localhost:5173"
+                    );
+
             config.setAllowedOrigins(
-                    List.of("http://localhost:5173")
+                    List.of(frontendUrl)
             );
 
             config.setAllowedMethods(
@@ -83,25 +84,14 @@ public class SecurityConfig {
 
         http.authorizeHttpRequests(auth -> auth
 
-                /*
-                 * Authentication endpoints
-                 */
                 .requestMatchers(
-                        "/api/auth/register",
                         "/api/auth/login"
                 ).permitAll()
 
-                /*
-                 * User management
-                 * Only Admin can create/update/delete users.
-                 */
-                .requestMatchers("/api/users/**")
-                .hasRole("Admin")
+                .requestMatchers(
+                        "/api/users/**"
+                ).hasRole("Admin")
 
-                /*
-                 * Resources
-                 * Only Admin can modify inventory.
-                 */
                 .requestMatchers(
                         HttpMethod.POST,
                         "/api/resources"
@@ -117,10 +107,6 @@ public class SecurityConfig {
                         "/api/resources/**"
                 ).hasRole("Admin")
 
-                /*
-                 * Issues
-                 * Only Admin can issue/return/delete resources.
-                 */
                 .requestMatchers(
                         HttpMethod.POST,
                         "/api/issues"
@@ -136,22 +122,13 @@ public class SecurityConfig {
                         "/api/issues/**"
                 ).hasRole("Admin")
 
-                /*
-                 * Audit logs are Admin-only.
-                 */
-                .requestMatchers("/api/audit-logs/**")
-                .hasRole("Admin")
+                .requestMatchers(
+                        "/api/audit-logs/**"
+                ).hasRole("Admin")
 
-                /*
-                 * Everything else requires authentication.
-                 */
                 .anyRequest().authenticated()
         );
 
-        /*
-         * Current development authentication method.
-         * We can replace this with JWT/session authentication later.
-         */
         http.httpBasic(httpBasic -> {});
 
         return http.build();

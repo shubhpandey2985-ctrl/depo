@@ -1,8 +1,5 @@
 import type { Role } from '../types/domain';
-import {
-  apiLogin,
-  clearApiCredentials,
-} from './api';
+import { apiLogin, clearApiCredentials } from './api';
 
 const AUTH_KEY = 'deeptech_auth';
 
@@ -12,6 +9,7 @@ export interface AuthUser {
   email: string;
   profession: string;
   role: Role;
+  mustChangePassword: boolean;
 }
 
 interface LoginResponse {
@@ -20,11 +18,8 @@ interface LoginResponse {
   email: string;
   profession: string;
   role: Role;
+  mustChangePassword: boolean;
 }
-
-/* =========================
-   LOGIN
-========================= */
 
 export async function login(
   email: string,
@@ -34,10 +29,7 @@ export async function login(
   try {
 
     const data: LoginResponse | null =
-      await apiLogin(
-        email,
-        password
-      );
+      await apiLogin(email, password);
 
     if (!data) {
       return null;
@@ -49,6 +41,8 @@ export async function login(
       email: data.email,
       profession: data.profession,
       role: data.role,
+      mustChangePassword:
+        data.mustChangePassword === true,
     };
 
     localStorage.setItem(
@@ -69,17 +63,10 @@ export async function login(
   }
 }
 
-/* =========================
-   CURRENT USER
-========================= */
-
-export function getCurrentUser():
-  AuthUser | null {
+export function getCurrentUser(): AuthUser | null {
 
   const stored =
-    localStorage.getItem(
-      AUTH_KEY
-    );
+    localStorage.getItem(AUTH_KEY);
 
   if (!stored) {
     return null;
@@ -87,37 +74,24 @@ export function getCurrentUser():
 
   try {
 
-    return JSON.parse(
-      stored
-    ) as AuthUser;
+    return JSON.parse(stored) as AuthUser;
 
   } catch {
 
-    localStorage.removeItem(
-      AUTH_KEY
-    );
+    localStorage.removeItem(AUTH_KEY);
 
     return null;
   }
 }
 
-/* =========================
-   LOGOUT
-========================= */
-
 export function logout(): void {
 
   clearApiCredentials();
 
-  localStorage.removeItem(
-    AUTH_KEY
-  );
+  localStorage.removeItem(AUTH_KEY);
 }
 
-/* =========================
-   LOGIN STATUS
-========================= */
-
 export function isLoggedIn(): boolean {
+
   return getCurrentUser() !== null;
 }

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import '../styles/global.css';
 
+
 import {
   Activity,
   ArrowRight,
@@ -40,6 +41,7 @@ import {
 } from 'lucide-react';
 
 import Login from '../features/auth/Login';
+import ChangePassword from '../features/auth/changePassword';
 
 import type {
   Resource,
@@ -188,6 +190,8 @@ function App() {
   const [role, setRole] = useState<'Admin' | 'User'>(
     currentUser?.role || 'User'
   );
+    const [loginPassword, setLoginPassword] =
+    useState('');
 
   const pageMap: Record<string, string> = {
     overview: 'Overview',
@@ -358,29 +362,74 @@ function App() {
   );
 
 
-  // =========================================================
-  // LOGIN
-  // =========================================================
+ // =========================================================
+// LOGIN
+// =========================================================
 
-  if (!currentUser) {
-    return (
-      <Login
-  onLogin={(user: AuthUser) => {
-    setCurrentUser(user);
-    setRole(user.role);
-    setProfileOpen(false);
-    setPage('Overview');
+if (!currentUser) {
 
-    window.history.replaceState(
-      { page: 'Overview' },
-      '',
-      '#overview'
-    );
-  }}
-/>
-    );
-  }
+  return (
+    <Login
+      onLogin={(
+        user: AuthUser,
+        password: string
+      ) => {
 
+        setLoginPassword(password);
+
+        setCurrentUser(user);
+
+        setRole(user.role);
+
+        setProfileOpen(false);
+
+        setPage('Overview');
+
+        window.history.replaceState(
+          { page: 'Overview' },
+          '',
+          '#overview'
+        );
+      }}
+    />
+  );
+
+}
+
+// =========================================================
+// FORCE PASSWORD CHANGE
+// =========================================================
+
+if (
+  currentUser.mustChangePassword &&
+  loginPassword
+) {
+
+  return (
+    <ChangePassword
+      email={currentUser.email}
+      currentPassword={loginPassword}
+      onPasswordChanged={(newPassword) => {
+
+        setLoginPassword(newPassword);
+
+        setCurrentUser({
+          ...currentUser,
+          mustChangePassword: false,
+        });
+
+        setPage('Overview');
+
+        window.history.replaceState(
+          { page: 'Overview' },
+          '',
+          '#overview'
+        );
+      }}
+    />
+  );
+
+}
 
   // =========================================================
   // NOTIFICATION

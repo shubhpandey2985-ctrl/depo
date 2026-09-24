@@ -35,62 +35,150 @@ public class dashboardController {
     @GetMapping
     public Map<String, Object> getDashboard() {
 
-        List<resource> resources = resourceRepository.findAll();
+        updateOverdueIssues();
 
-        // Quantity physically available in the inventory right now.
+        List<resource> resources =
+                resourceRepository.findAll();
+
         int availableItems = resources.stream()
                 .filter(r -> r.getQuantity() != null)
                 .mapToInt(resource::getQuantity)
                 .sum();
 
-        // Low-stock quantity: resources with 1-2 units remaining.
         int lowStockItems = resources.stream()
-                .filter(r -> r.getQuantity() != null
-                        && r.getQuantity() > 0
-                        && r.getQuantity() <= 2)
+                .filter(r ->
+                        r.getQuantity() != null
+                                && r.getQuantity() > 0
+                                && r.getQuantity() <= 2)
                 .mapToInt(resource::getQuantity)
                 .sum();
 
-        // Items currently outside the inventory because they are issued.
-        int issuedItems = issueRepository.findByStatus("Issued")
-                .stream()
-                .mapToInt(issue::getQuantity)
-                .sum();
+        int issuedItems =
+                issueRepository
+                        .findByStatus("Issued")
+                        .stream()
+                        .mapToInt(issue::getQuantity)
+                        .sum();
 
-        // Overdue items are also currently outside the inventory.
-        int overdueItems = issueRepository.findByStatus("Overdue")
-                .stream()
-                .mapToInt(issue::getQuantity)
-                .sum();
+        int overdueItems =
+                issueRepository
+                        .findByStatus("Overdue")
+                        .stream()
+                        .mapToInt(issue::getQuantity)
+                        .sum();
 
-        // Total physical inventory = available + currently issued + overdue.
-        int totalItems = availableItems + issuedItems + overdueItems;
+        int totalItems =
+                availableItems
+                        + issuedItems
+                        + overdueItems;
 
-        // Quantity issued today.
-        int issuedToday = issueRepository
-                .findByIssuedAtBetween(
-                        LocalDate.now().atStartOfDay(),
-                        LocalDate.now().plusDays(1).atStartOfDay()
+        int issuedToday =
+                issueRepository
+                        .findByIssuedAtBetween(
+                                LocalDate.now()
+                                        .atStartOfDay(),
+                                LocalDate.now()
+                                        .plusDays(1)
+                                        .atStartOfDay()
+                        )
+                        .stream()
+                        .mapToInt(issue::getQuantity)
+                        .sum();
+
+        Map<String, Object> dashboard =
+                new HashMap<>();
+
+        dashboard.put(
+                "totalItems",
+                totalItems
+        );
+
+        dashboard.put(
+                "availableItems",
+                availableItems
+        );
+
+        dashboard.put(
+                "issuedToday",
+                issuedToday
+        );
+
+        dashboard.put(
+                "lowStockItems",
+                lowStockItems
+        );
+
+        dashboard.put(
+                "totalResources",
+                resourceRepository.count()
+        );
+
+        dashboard.put(
+                "totalUsers",
+                userRepository.count()
+        );
+
+        dashboard.put(
+                "totalIssues",
+                issueRepository.count()
+        );
+
+        dashboard.put(
+                "activeIssues",
+                issueRepository.countByStatus(
+                        "Issued"
                 )
-                .stream()
-                .mapToInt(issue::getQuantity)
-                .sum();
+        );
 
-        Map<String, Object> dashboard = new HashMap<>();
+        dashboard.put(
+                "returnedIssues",
+                issueRepository.countByStatus(
+                        "Returned"
+                )
+        );
 
-        dashboard.put("totalItems", totalItems);
-        dashboard.put("availableItems", availableItems);
-        dashboard.put("issuedToday", issuedToday);
-        dashboard.put("lowStockItems", lowStockItems);
-
-        // Additional backend statistics retained for other frontend features.
-        dashboard.put("totalResources", resourceRepository.count());
-        dashboard.put("totalUsers", userRepository.count());
-        dashboard.put("totalIssues", issueRepository.count());
-        dashboard.put("activeIssues", issueRepository.countByStatus("Issued"));
-        dashboard.put("returnedIssues", issueRepository.countByStatus("Returned"));
-        dashboard.put("overdueIssues", issueRepository.countByStatus("Overdue"));
+        dashboard.put(
+                "overdueIssues",
+                issueRepository.countByStatus(
+                        "Overdue"
+                )
+        );
 
         return dashboard;
+    }
+
+    private void updateOverdueIssues() {
+
+        List<issue> issues =
+                issueRepository.findByStatus(
+                        "Issued"
+                );
+
+        LocalDate today =
+                LocalDate.now();
+
+        boolean changed = false;
+
+        for (issue currentIssue : issues) {
+
+            if (currentIssue.getReturnDate() != null
+                    && currentIssue
+                    .getReturnDate()
+                    .isBefore(today)) {
+
+                currentIssue.setStatus(
+                        "Overdue"
+                );
+
+                changed = true;
+            }
+        }
+
+        if (changed) {
+
+            issueRepository.saveAll(
+                    issues
+            );
+        }
     }
 }

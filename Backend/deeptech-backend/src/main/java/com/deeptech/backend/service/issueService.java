@@ -7,6 +7,7 @@ import com.deeptech.backend.repository.issueRepository;
 import com.deeptech.backend.repository.resourceRepository;
 import com.deeptech.backend.repository.userRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -54,12 +55,24 @@ public class issueService {
 
         updateOverdueIssues();
 
+        if (!userRepository.existsById(userId)) {
+            throw new RuntimeException(
+                    "User not found with id: " + userId
+            );
+        }
+
         return issueRepository.findByUserId(userId);
     }
 
     public List<issue> getIssuesByResource(Long resourceId) {
 
         updateOverdueIssues();
+
+        if (!resourceRepository.existsById(resourceId)) {
+            throw new RuntimeException(
+                    "Resource not found with id: " + resourceId
+            );
+        }
 
         return issueRepository.findByResourceId(resourceId);
     }
@@ -68,59 +81,127 @@ public class issueService {
 
         updateOverdueIssues();
 
-        return issueRepository.findByStatus(status);
-    }
-
-    public issue createIssue(
-            issue issue,
-            Long userId,
-            Long resourceId) {
-
-        user user = userRepository.findById(userId)
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "User not found with id: " + userId
-                        ));
-
-        resource resource =
-                resourceRepository.findById(resourceId)
-                        .orElseThrow(() ->
-                                new RuntimeException(
-                                        "Resource not found with id: "
-                                                + resourceId
-                                ));
-
-        if (issue.getQuantity() == null
-                || issue.getQuantity() <= 0) {
-
+        if (status == null || status.isBlank()) {
             throw new RuntimeException(
-                    "Quantity must be greater than zero"
+                    "Issue status cannot be empty"
             );
         }
 
-        if (resource.getQuantity()
-                < issue.getQuantity()) {
+        return issueRepository.findByStatus(status);
+    }
 
+    @Transactional
+    public issue createIssue(
+            issue newIssue,
+            Long userId,
+            Long resourceId) {
+
+        if (newIssue == null) {
+            throw new RuntimeException(
+                    "Issue data cannot be empty"
+            );
+        }
+
+        if (userId == null) {
+            throw new RuntimeException(
+                    "User ID is required"
+            );
+        }
+
+        if (resourceId == null) {
+            throw new RuntimeException(
+                    "Resource ID is required"
+            );
+        }
+
+        user user = userRepository
+                .findById(userId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "User not found with id: "
+                                        + userId
+                        ));
+
+        resource resource = resourceRepository
+                .findById(resourceId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Resource not found with id: "
+                                        + resourceId
+                        ));
+
+        Integer quantity =
+                newIssue.getQuantity();
+
+        if (quantity == null || quantity <= 0) {
+            throw new RuntimeException(
+                    "Issue quantity must be greater than zero"
+            );
+        }
+
+        if (resource.getQuantity() == null) {
+            throw new RuntimeException(
+                    "Resource quantity is invalid"
+            );
+        }
+
+        if (resource.getQuantity() < quantity) {
             throw new RuntimeException(
                     "Not enough resource quantity available"
             );
         }
 
-        issue.setUser(user);
-        issue.setResource(resource);
+        /*
+         * Return date is required when the resource
+         * is marked as returnable.
+         */
+        if (newIssue.isReturnable()
+                && newIssue.getReturnDate() == null) {
 
-        if (issue.getIssuedAt() == null) {
-
-            issue.setIssuedAt(
-                    LocalDateTime.now()
+            throw new RuntimeException(
+                    "Return date is required for returnable resources"
             );
         }
 
-        issue.setStatus("Issued");
+        /*
+         * Return date cannot be before the issue date.
+         */
+        if (newIssue.isReturnable()
+                && newIssue.getReturnDate() != null
+                && newIssue.getReturnDate()
+                .isBefore(LocalDate.now())) {
 
+            throw new RuntimeException(
+                    "Return date cannot be in the past"
+            );
+        }
+
+        newIssue.setUser(user);
+        newIssue.setResource(resource);
+
+        /*
+         * Always use the backend's current time
+         * instead of trusting a frontend timestamp.
+         */
+        newIssue.setIssuedAt(
+                LocalDateTime.now()
+        );
+
+        newIssue.setStatus("Issued");
+
+        /*
+         * A non-returnable resource should not
+         * have a return date.
+         */
+        if (!newIssue.isReturnable()) {
+            newIssue.setReturnDate(null);
+        }
+
+        /*
+         * Reduce available resource quantity.
+         */
         resource.setQuantity(
-                resource.getQuantity()
-                        - issue.getQuantity()
+                resource.getQuantity() - quantity
         );
 
         updateResourceStatus(resource);
@@ -128,8 +209,11 @@ public class issueService {
         resourceRepository.save(resource);
 
         issue savedIssue =
-                issueRepository.save(issue);
+                issueRepository.save(newIssue);
 
+        /*
+         * Record the action in audit logs.
+         */
         auditLogService.log(
                 "ISSUE",
                 "ISSUE",
@@ -145,6 +229,7 @@ public class issueService {
         return savedIssue;
     }
 
+    @Transactional
     public issue returnIssue(Long id) {
 
         issue existingIssue =
@@ -153,12 +238,37 @@ public class issueService {
         if ("Returned".equalsIgnoreCase(
                 existingIssue.getStatus())) {
 
-            return existingIssue;
+            throw new RuntimeException(
+                    "This resource has already been returned"
+            );
+        }
+
+        if (!"Issued".equalsIgnoreCase(
+                existingIssue.getStatus())
+                && !"Overdue".equalsIgnoreCase(
+                existingIssue.getStatus())) {
+
+            throw new RuntimeException(
+                    "This issue cannot be returned"
+            );
         }
 
         resource resource =
                 existingIssue.getResource();
 
+        if (resource == null) {
+            throw new RuntimeException(
+                    "Resource associated with this issue was not found"
+            );
+        }
+
+        if (resource.getQuantity() == null) {
+            resource.setQuantity(0);
+        }
+
+        /*
+         * Restore the returned quantity.
+         */
         resource.setQuantity(
                 resource.getQuantity()
                         + existingIssue.getQuantity()
@@ -172,7 +282,9 @@ public class issueService {
                 LocalDateTime.now()
         );
 
-        existingIssue.setStatus("Returned");
+        existingIssue.setStatus(
+                "Returned"
+        );
 
         issue savedIssue =
                 issueRepository.save(existingIssue);
@@ -190,10 +302,26 @@ public class issueService {
         return savedIssue;
     }
 
+    @Transactional
     public void deleteIssue(Long id) {
 
         issue existingIssue =
                 getIssueById(id);
+
+        /*
+         * Do not allow deletion of an active issue,
+         * because doing so would leave inventory
+         * quantity incorrect.
+         */
+        if ("Issued".equalsIgnoreCase(
+                existingIssue.getStatus())
+                || "Overdue".equalsIgnoreCase(
+                existingIssue.getStatus())) {
+
+            throw new RuntimeException(
+                    "Active issues cannot be deleted. Return the resource first."
+            );
+        }
 
         issueRepository.delete(existingIssue);
 
@@ -210,11 +338,15 @@ public class issueService {
 
         if (resource.getQuantity() == 0) {
 
-            resource.setStatus("Unavailable");
+            resource.setStatus(
+                    "Unavailable"
+            );
 
         } else {
 
-            resource.setStatus("Available");
+            resource.setStatus(
+                    "Available"
+            );
         }
     }
 
@@ -223,20 +355,27 @@ public class issueService {
         List<issue> issues =
                 issueRepository.findByStatus("Issued");
 
-        LocalDate today = LocalDate.now();
+        LocalDate today =
+                LocalDate.now();
+
+        boolean changed = false;
 
         for (issue currentIssue : issues) {
 
             if (currentIssue.getReturnDate() != null
-                    && currentIssue.getReturnDate()
+                    && currentIssue
+                    .getReturnDate()
                     .isBefore(today)) {
 
-                currentIssue.setStatus("Overdue");
+                currentIssue.setStatus(
+                        "Overdue"
+                );
+
+                changed = true;
             }
         }
 
-        if (!issues.isEmpty()) {
-
+        if (changed) {
             issueRepository.saveAll(issues);
         }
     }

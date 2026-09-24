@@ -2,7 +2,6 @@ package com.deeptech.backend.controller;
 
 import com.deeptech.backend.entity.user;
 import com.deeptech.backend.repository.userRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,37 +20,25 @@ public class authController {
         this.passwordEncoder = passwordEncoder;
     }
 
-    @PostMapping("/register")
-    @ResponseStatus(HttpStatus.CREATED)
-    public user register(
-            @RequestBody RegisterRequest request) {
-
-        if (userRepository.existsByEmail(request.email())) {
-            throw new RuntimeException("Email already exists");
-        }
-
-        user newUser = new user();
-
-        newUser.setName(request.name());
-        newUser.setEmail(request.email());
-        newUser.setPassword(
-                passwordEncoder.encode(request.password())
-        );
-        newUser.setProfession(request.profession());
-
-        // Public registration can only create normal users.
-        newUser.setRole("User");
-
-        // New accounts must change their password
-        // after the first login.
-        newUser.setMustChangePassword(true);
-
-        return userRepository.save(newUser);
-    }
-
     @PostMapping("/login")
     public user login(
             @RequestBody LoginRequest request) {
+
+        if (request.email() == null
+                || request.email().isBlank()) {
+
+            throw new RuntimeException(
+                    "Email cannot be empty"
+            );
+        }
+
+        if (request.password() == null
+                || request.password().isBlank()) {
+
+            throw new RuntimeException(
+                    "Password cannot be empty"
+            );
+        }
 
         user foundUser =
                 userRepository
@@ -71,16 +58,9 @@ public class authController {
         return foundUser;
     }
 
-    public record RegisterRequest(
-            String name,
-            String email,
-            String password,
-            String profession,
-            String role
-    ) {}
-
     public record LoginRequest(
             String email,
             String password
-    ) {}
+    ) {
+    }
 }
