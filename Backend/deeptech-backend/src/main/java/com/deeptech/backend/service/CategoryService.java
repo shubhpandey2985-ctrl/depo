@@ -10,9 +10,14 @@ import java.util.List;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final auditLogService auditLogService;
 
-    public CategoryService(CategoryRepository categoryRepository) {
+    public CategoryService(
+            CategoryRepository categoryRepository,
+            auditLogService auditLogService) {
+
         this.categoryRepository = categoryRepository;
+        this.auditLogService = auditLogService;
     }
 
     public List<Category> getAllCategories() {
@@ -20,25 +25,74 @@ public class CategoryService {
     }
 
     public Category getCategoryById(Long id) {
+
         return categoryRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Category not found with id: " + id));
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "Category not found with id: " + id
+                        ));
     }
 
     public Category createCategory(Category category) {
-        return categoryRepository.save(category);
+
+        Category savedCategory =
+                categoryRepository.save(category);
+
+        auditLogService.log(
+                "CREATE",
+                "CATEGORY",
+                savedCategory.getId(),
+                "Created category: "
+                        + savedCategory.getName()
+        );
+
+        return savedCategory;
     }
 
-    public Category updateCategory(Long id, Category categoryDetails) {
-        Category category = getCategoryById(id);
+    public Category updateCategory(
+            Long id,
+            Category categoryDetails) {
 
-        category.setName(categoryDetails.getName());
-        category.setParent(categoryDetails.getParent());
+        Category category =
+                getCategoryById(id);
 
-        return categoryRepository.save(category);
+        category.setName(
+                categoryDetails.getName()
+        );
+
+        category.setParent(
+                categoryDetails.getParent()
+        );
+
+        Category savedCategory =
+                categoryRepository.save(category);
+
+        auditLogService.log(
+                "UPDATE",
+                "CATEGORY",
+                savedCategory.getId(),
+                "Updated category: "
+                        + savedCategory.getName()
+        );
+
+        return savedCategory;
     }
 
     public void deleteCategory(Long id) {
-        Category category = getCategoryById(id);
+
+        Category category =
+                getCategoryById(id);
+
+        String categoryName =
+                category.getName();
+
         categoryRepository.delete(category);
+
+        auditLogService.log(
+                "DELETE",
+                "CATEGORY",
+                id,
+                "Deleted category: " + categoryName
+        );
     }
 }

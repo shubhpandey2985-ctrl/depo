@@ -51,17 +51,23 @@ import type {
 } from '../types/domain';
 
 import {
-  initializeResources,
-  addResource,
-  updateResource,
   getAllResources,
 } from '../services/resourceService';
 
 import {
-  createIssue,
+  getResourcesApi,
+  createResourceApi,
+  updateResourceApi,
+  deleteResourceApi,
+  getDashboardApi,
+  getUsersApi,
+  getIssuesApi,
+  createIssueApi,
+  returnIssueApi,
+} from '../services/api';
+
+import {
   getAllIssues,
-  returnIssue,
-  syncOverdueIssues,
 } from '../services/issueService';
 
 import {
@@ -70,12 +76,6 @@ import {
   type AuthUser,
 } from '../services/authService';
 
-import {
-  getUsers,
-  saveUsers,
-  getResources,
-  saveResources,
-} from '../lib/storage/localStorage';
 
 const nav = [
   { label: 'Overview', icon: LayoutDashboard },
@@ -96,27 +96,6 @@ function Brand() {
   );
 }
 
-function initializeUsers(): User[] {
-  const users = getUsers();
-
-  if (users.length === 0) {
-    const defaultUsers: User[] = [
-      {
-        id: 'USR-001',
-        name: 'Admin',
-        profession: 'Staff',
-        role: 'Admin',
-      },
-    ];
-
-    saveUsers(defaultUsers);
-
-    return defaultUsers;
-  }
-
-  return users;
-}
-
 const MONTH_NAMES = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -129,6 +108,78 @@ function getDefaultReturnDate(): string {
   const month = MONTH_NAMES[d.getMonth()];
   const year = d.getFullYear();
   return `${day} ${month} ${year}`;
+}
+
+function toBackendReturnDate(value: string): string | null {
+  const parts = (value || '').trim().split(/\s+/);
+
+  if (parts.length === 3) {
+    const day = Number(parts[0]);
+    const month = MONTH_NAMES.findIndex(
+      (monthName) =>
+        monthName.toLowerCase() === parts[1].toLowerCase()
+    );
+    const year = Number(parts[2]);
+
+    if (Number.isInteger(day) && month >= 0 && Number.isInteger(year)) {
+      const date = new Date(year, month, day);
+      if (
+        date.getFullYear() === year &&
+        date.getMonth() === month &&
+        date.getDate() === day
+      ) {
+        return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+  }
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+  }
+
+  return null;
+}
+
+function mapBackendIssue(item: any): Issue {
+  return {
+    id: String(item.id),
+    resourceId: String(item.resourceId),
+    resourceName: item.resourceName || 'Unknown resource',
+    userId: String(item.userId),
+    userName: item.userName || 'Unknown user',
+    profession: (item.profession || 'Other') as Profession,
+    issuedAt: item.issuedAt,
+    returnable: Boolean(item.returnable),
+    returnDate: item.returnDate || undefined,
+    returnedAt: item.returnedAt || undefined,
+    status: (item.status || 'Issued') as Issue['status'],
+    quantity: Number(item.quantity) || 1,
+  };
+}
+
+function mapBackendResource(item: any): Resource {
+  return {
+    id: String(item.id),
+    name: item.name,
+    category: item.category === 'Software' ? 'Software' : 'Hardware',
+    sub:
+      item.sub ||
+      (item.category === 'Hardware'
+        ? 'Hardware resource'
+        : 'Software resource'),
+    quantity: Number(item.quantity) || 0,
+    status:
+      Number(item.quantity) === 0
+        ? 'Unavailable'
+        : Number(item.quantity) <= 3
+          ? 'Low stock'
+          : 'Available',
+    tone:
+      item.tone ||
+      (item.category === 'Hardware' ? 'blue' : 'purple'),
+    location: item.location || 'Innovation Centre',
+  };
 }
 
 function App() {
@@ -161,9 +212,21 @@ function App() {
   const [editingResource, setEditingResource] =
     useState<Resource | null>(null);
 
-  const [resources, setResources] = useState<Resource[]>(() =>
-    initializeResources()
-  );
+  const [resources, setResources] =
+    useState<Resource[]>([]);
+
+  const [dashboard, setDashboard] = useState({
+    totalItems: 0,
+    availableItems: 0,
+    issuedToday: 0,
+    lowStockItems: 0,
+    totalResources: 0,
+    returnedIssues: 0,
+    totalUsers: 0,
+    totalIssues: 0,
+    activeIssues: 0,
+    overdueIssues: 0,
+  });
 
   const [query, setQuery] = useState('');
 
@@ -229,34 +292,52 @@ function App() {
 
 
   // =========================================================
-  // INITIALIZE USERS
-  // =========================================================
-
-  useEffect(() => {
-    if (currentUser) {
-      initializeUsers();
-    }
-  }, [currentUser]);
-
-
-  // =========================================================
-  // OVERDUE SYNC
+  // LOAD RESOURCES FROM BACKEND
   // =========================================================
 
   useEffect(() => {
     if (!currentUser) return;
 
-    syncOverdueIssues();
+    const loadResources = async () => {
+      try {
+        const data = await getResourcesApi();
 
+        const mappedResources: Resource[] =
+          data.map(mapBackendResource);
 
-    const interval = window.setInterval(() => {
-      syncOverdueIssues();
-    }, 60 * 1000);
-
-
-    return () => {
-      window.clearInterval(interval);
+        setResources(mappedResources);
+      } catch (error) {
+        console.error(
+          'Failed to load resources from backend:',
+          error
+        );
+      }
     };
+
+    loadResources();
+  }, [currentUser]);
+
+
+  // =========================================================
+  // LOAD DASHBOARD FROM BACKEND
+  // =========================================================
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const loadDashboard = async () => {
+      try {
+        const data = await getDashboardApi();
+        setDashboard(data);
+      } catch (error) {
+        console.error(
+          'Failed to load dashboard from backend:',
+          error
+        );
+      }
+    };
+
+    loadDashboard();
   }, [currentUser]);
 
 
@@ -284,19 +365,19 @@ function App() {
   if (!currentUser) {
     return (
       <Login
-        onLogin={(user) => {
-          setCurrentUser(user);
-          setRole(user.role);
-          setProfileOpen(false);
-          setPage('Overview');
+  onLogin={(user: AuthUser) => {
+    setCurrentUser(user);
+    setRole(user.role);
+    setProfileOpen(false);
+    setPage('Overview');
 
-          window.history.replaceState(
-            { page: 'Overview' },
-            '',
-            '#overview'
-          );
-        }}
-      />
+    window.history.replaceState(
+      { page: 'Overview' },
+      '',
+      '#overview'
+    );
+  }}
+/>
     );
   }
 
@@ -365,7 +446,7 @@ function App() {
   // ADD RESOURCE
   // =========================================================
 
-  const addItem = (data: {
+  const addItem = async (data: {
     name: string;
     category: 'Hardware' | 'Software';
     quantity: number;
@@ -374,16 +455,12 @@ function App() {
   }) => {
 
     const cleanName = data.name.trim();
-
-    const cleanLocation =
-      data.location.trim();
-
+    const cleanLocation = data.location.trim();
 
     if (!cleanName) {
       notify('Enter a resource name');
       return;
     }
-
 
     if (
       !Number.isInteger(data.quantity) ||
@@ -393,59 +470,71 @@ function App() {
       return;
     }
 
+    try {
+      const created = await createResourceApi({
+        name: cleanName,
+        category: data.category,
+        sub:
+          data.sub?.trim() ||
+          (data.category === 'Hardware'
+            ? 'Hardware resource'
+            : 'Software resource'),
+        quantity: data.quantity,
+        tone:
+          data.category === 'Hardware'
+            ? 'blue'
+            : 'purple',
+        location:
+          cleanLocation || 'Innovation Centre',
+      });
 
-    const nextNumber =
-      resources.reduce(
-        (max, resource) => {
-          const number = Number(
-            resource.id.replace('RES-', '')
-          );
+      const newResource: Resource = {
+        id: String(created.id),
+        name: created.name,
+        category:
+          created.category === 'Software'
+            ? 'Software'
+            : 'Hardware',
+        sub:
+          created.sub ||
+          (created.category === 'Hardware'
+            ? 'Hardware resource'
+            : 'Software resource'),
+        quantity: Number(created.quantity) || 0,
+        status:
+          Number(created.quantity) === 0
+            ? 'Unavailable'
+            : Number(created.quantity) <= 3
+              ? 'Low stock'
+              : 'Available',
+        tone:
+          created.tone ||
+          (created.category === 'Hardware'
+            ? 'blue'
+            : 'purple'),
+        location:
+          created.location || 'Innovation Centre',
+      };
 
-          return Number.isFinite(number)
-            ? Math.max(max, number)
-            : max;
-        },
-        0
-      ) + 1;
+      setResources((previous) => [
+        ...previous,
+        newResource,
+      ]);
 
+      notify(`${cleanName} added to inventory`);
+      go('Inventory');
+    } catch (error) {
+      console.error(
+        'Failed to create resource:',
+        error
+      );
 
-    const item: Resource = {
-      id: `RES-${String(nextNumber).padStart(3, '0')}`,
-
-      name: cleanName,
-
-      category: data.category,
-
-      sub:
-        data.sub?.trim() ||
-        (data.category === 'Hardware'
-          ? 'Hardware resource'
-          : 'Software resource'),
-
-      quantity: data.quantity,
-
-      status:
-        data.quantity <= 3
-          ? 'Low stock'
-          : 'Available',
-
-      tone:
-        data.category === 'Hardware'
-          ? 'blue'
-          : 'purple',
-
-      location:
-        cleanLocation || 'Innovation Centre',
-    };
-
-
-    const updated = addResource(item);
-
-    setResources(updated);
-
-    notify(`${cleanName} added to inventory`);
-
-    go('Inventory');
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Failed to add resource'
+      );
+    }
   };
 
 
@@ -453,62 +542,62 @@ function App() {
   // DELETE RESOURCE
   // =========================================================
 
-  const deleteItem = (resource: Resource) => {
+  const deleteItem = async (resource: Resource) => {
 
     if (role !== 'Admin') {
       notify('Only Admin can delete resources');
       return;
     }
 
-
     const issues = getAllIssues();
-
 
     const hasActiveIssue = issues.some(
       (item) =>
-        item.resourceId === resource.id &&
+        String(item.resourceId) === String(resource.id) &&
         item.status !== 'Returned'
     );
-
 
     if (hasActiveIssue) {
       notify(
         'Cannot delete a resource that is currently issued'
       );
-
       return;
     }
-
 
     const confirmed = window.confirm(
       `Delete "${resource.name}" from inventory?`
     );
 
+    if (!confirmed) return;
 
-    if (!confirmed) {
-      return;
-    }
+    try {
+      await deleteResourceApi(resource.id);
 
-
-    const updatedResources =
-      getResources().filter(
-        (item) => item.id !== resource.id
+      setResources((previous) =>
+        previous.filter(
+          (item) => item.id !== resource.id
+        )
       );
 
+      if (selected?.id === resource.id) {
+        setSelected(null);
+      }
 
-    saveResources(updatedResources);
+      notify(
+        `${resource.name} deleted from inventory`
+      );
+    } catch (error) {
+      console.error(
+        'Failed to delete resource:',
+        error
+      );
 
-    setResources(updatedResources);
-
-
-    if (selected?.id === resource.id) {
-      setSelected(null);
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Failed to delete resource'
+      );
     }
-
-
-    notify(
-      `${resource.name} deleted from inventory`
-    );
   };
 
 
@@ -530,7 +619,7 @@ function App() {
   };
 
 
-  const saveEditedResource = (data: {
+  const saveEditedResource = async (data: {
     name: string;
     category: 'Hardware' | 'Software';
     quantity: number;
@@ -539,18 +628,13 @@ function App() {
 
     if (!editingResource) return;
 
-
     const cleanName = data.name.trim();
-
-    const cleanLocation =
-      data.location.trim();
-
+    const cleanLocation = data.location.trim();
 
     if (!cleanName) {
       notify('Enter a resource name');
       return;
     }
-
 
     if (
       !Number.isInteger(data.quantity) ||
@@ -560,64 +644,83 @@ function App() {
       return;
     }
 
-
-    const updatedResources =
-      getResources().map((resource) =>
-        resource.id === editingResource.id
-          ? {
-              ...resource,
-
-              name: cleanName,
-
-              category: data.category,
-
-              quantity: data.quantity,
-
-              status:
-                data.quantity <= 3
-                  ? 'Low stock' as const
-                  : 'Available' as const,
-
-              tone:
-                data.category === 'Hardware'
-                  ? 'blue'
-                  : 'purple',
-
-              sub:
-                data.category === 'Hardware'
-                  ? 'Hardware resource'
-                  : 'Software resource',
-
-              location:
-                cleanLocation ||
-                'Innovation Centre',
-            }
-          : resource
+    try {
+      const updated = await updateResourceApi(
+        editingResource.id,
+        {
+          name: cleanName,
+          category: data.category,
+          sub:
+            data.category === 'Hardware'
+              ? 'Hardware resource'
+              : 'Software resource',
+          quantity: data.quantity,
+          tone:
+            data.category === 'Hardware'
+              ? 'blue'
+              : 'purple',
+          location:
+            cleanLocation || 'Innovation Centre',
+        }
       );
 
+      const updatedResource: Resource = {
+        id: String(updated.id),
+        name: updated.name,
+        category:
+          updated.category === 'Software'
+            ? 'Software'
+            : 'Hardware',
+        sub:
+          updated.sub ||
+          (updated.category === 'Hardware'
+            ? 'Hardware resource'
+            : 'Software resource'),
+        quantity: Number(updated.quantity) || 0,
+        status:
+          Number(updated.quantity) === 0
+            ? 'Unavailable'
+            : Number(updated.quantity) <= 3
+              ? 'Low stock'
+              : 'Available',
+        tone:
+          updated.tone ||
+          (updated.category === 'Hardware'
+            ? 'blue'
+            : 'purple'),
+        location:
+          updated.location || 'Innovation Centre',
+      };
 
-    saveResources(updatedResources);
+      setResources((previous) =>
+        previous.map((resource) =>
+          resource.id === editingResource.id
+            ? updatedResource
+            : resource
+        )
+      );
 
-    setResources(updatedResources);
+      if (selected?.id === editingResource.id) {
+        setSelected(updatedResource);
+      }
 
+      setEditingResource(null);
 
-    if (
-      selected?.id === editingResource.id
-    ) {
-      setSelected(
-        updatedResources.find(
-          (r) =>
-            r.id === editingResource.id
-        ) || null
+      notify(
+        `${cleanName} updated successfully`
+      );
+    } catch (error) {
+      console.error(
+        'Failed to update resource:',
+        error
+      );
+
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Failed to update resource'
       );
     }
-
-
-    setEditingResource(null);
-
-    notify(
-      `${cleanName} updated successfully`
-    );
   };
 
 
@@ -625,119 +728,95 @@ function App() {
   // ISSUE RESOURCE
   // =========================================================
 
-  const completeIssue = () => {
+  const completeIssue = async () => {
 
     if (!selected) {
-      return notify(
-        'Select a resource first'
-      );
+      return notify('Select a resource first');
     }
-
 
     if (!issue.name.trim()) {
-      return notify(
-        'Add a recipient name to continue'
-      );
+      return notify('Add a recipient name to continue');
     }
-
 
     if (selected.quantity <= 0) {
-      return notify(
-        'This resource is currently unavailable'
-      );
+      return notify('This resource is currently unavailable');
     }
-
-
-    // =======================================================
-    // QUANTITY VALIDATION
-    // =======================================================
 
     if (
       !Number.isInteger(issue.quantity) ||
       issue.quantity < 1 ||
       issue.quantity > selected.quantity
     ) {
-      return notify(
-        'Choose a valid quantity'
-      );
+      return notify('Choose a valid quantity');
     }
 
+    try {
+      // The backend issue table requires a real user ID.
+      // Match the recipient against the users stored in MySQL.
+      const users = await getUsersApi();
+      const recipient = users.find(
+        (item: any) =>
+          String(item.name || '').trim().toLowerCase() ===
+          issue.name.trim().toLowerCase()
+      );
 
-    // =======================================================
-    // CREATE ISSUE RECORD
-    // =======================================================
+      if (!recipient) {
+        return notify(
+          'Recipient is not registered in People. Add the person first.'
+        );
+      }
 
-    const newIssue: Issue = {
-      id: `ISS-${Date.now()}`,
+      const returnDate = issue.returnable
+        ? toBackendReturnDate(issue.date)
+        : null;
 
-      resourceId: selected.id,
+      if (issue.returnable && !returnDate) {
+        return notify('Choose a valid return date');
+      }
 
-      resourceName: selected.name,
+      await createIssueApi(
+        {
+          quantity: issue.quantity,
+          returnable: issue.returnable,
+          returnDate,
+        },
+        String(recipient.id),
+        selected.id
+      );
 
-      userId: `USR-${Date.now()}`,
+      // Refresh inventory from MySQL so the quantity shown in the UI
+      // matches the database immediately after the issue.
+      const resourceData = await getResourcesApi();
+      setResources(resourceData.map(mapBackendResource));
 
-      userName: issue.name,
+      // Refresh dashboard numbers as well.
+      const dashboardData = await getDashboardApi();
+      setDashboard(dashboardData);
 
-      profession:
-        issue.profession as Issue['profession'],
+      notify(
+        `${issue.quantity} × ${selected.name} issued to ${recipient.name}`
+      );
 
-      issuedAt:
-        new Date().toISOString(),
+      setSelected(null);
 
-      returnable:
-        issue.returnable,
+      setIssue({
+        name: '',
+        profession: 'Student',
+        returnable: true,
+        date: getDefaultReturnDate(),
+        quantity: 1,
+      });
 
-      ...(issue.returnable
-        ? {
-            returnDate: issue.date,
-          }
-        : {}),
+      go('History');
+    } catch (error) {
+      console.error('Failed to issue resource:', error);
 
-      status: 'Issued',
-
-      // NEW
-      quantity: issue.quantity,
-    };
-
-
-    // =======================================================
-    // SAVE ISSUE + UPDATE INVENTORY
-    // =======================================================
-
-    const updatedIssues =
-      createIssue(newIssue);
-
-
-    // Refresh issue state isn't required
-    // because History reads from storage.
-
-
-    const updatedResources =
-      getAllResources();
-
-
-    setResources(updatedResources);
-
-
-    notify(
-      `${issue.quantity} × ${selected.name} issued to ${issue.name}`
-    );
-
-
-    setSelected(null);
-
-
-    // Reset issue form
-    setIssue({
-      name: '',
-      profession: 'Student',
-      returnable: true,
-      date: getDefaultReturnDate(),
-      quantity: 1,
-    });
-
-
-    go('History');
+      notify(
+        error instanceof Error
+          ? error.message
+          : 'Failed to issue resource'
+      );
+    }
   };
 
 
@@ -957,6 +1036,7 @@ function App() {
             setSelected={setSelected}
             resources={resources}
             issues={getAllIssues()}
+            dashboard={dashboard}
           />
         )}
 
@@ -1101,12 +1181,25 @@ function Overview({
   setSelected,
   resources,
   issues,
+  dashboard,
 }: {
   role: string;
   go: (x: string) => void;
   setSelected: (r: Resource) => void;
   resources: Resource[];
   issues: ReturnType<typeof getAllIssues>;
+  dashboard: {
+    totalItems: number;
+    availableItems: number;
+    issuedToday: number;
+    lowStockItems: number;
+    totalResources: number;
+    returnedIssues: number;
+    totalUsers: number;
+    totalIssues: number;
+    activeIssues: number;
+    overdueIssues: number;
+  };
 }) {
   const currentHour = new Date().getHours();
 
@@ -1121,72 +1214,21 @@ function Overview({
           : 'Good night, Admin.';
 
 
-  // Total quantity currently available
-  const availableNow = resources.reduce(
-    (sum, resource) =>
-      sum + resource.quantity,
-    0
-  );
+  // Dashboard inventory values are calculated by the backend
+  // from the actual MySQL resource and issue data.
+  const totalItems = dashboard.totalItems;
+  const availableNow = dashboard.availableItems;
+  const issuedToday = dashboard.issuedToday;
 
+  // Current quantity outside inventory (issued or overdue).
+  const issuedCount = Math.max(0, totalItems - availableNow);
 
-  // Total quantity currently issued
-  const issuedCount = issues
-    .filter(
-      (issue) =>
-        issue.status === 'Issued' ||
-        issue.status === 'Overdue'
-    )
-    .reduce(
-      (sum, issue) =>
-        sum + (issue.quantity || 1),
-      0
-    );
+  // Backend reports the quantity currently in low-stock resources.
+  const lowStockCount = dashboard.lowStockItems;
 
-
-  const totalItems =
-    availableNow + issuedCount;
-
-
-  const todayKey =
-    new Date().toDateString();
-
-
-  // Total quantity issued today
-  const issuedToday = issues
-    .filter(
-      (issue) =>
-        new Date(
-          issue.issuedAt
-        ).toDateString() === todayKey
-    )
-    .reduce(
-      (sum, issue) =>
-        sum + (issue.quantity || 1),
-      0
-    );
-
-
-  const lowStockCount =
-    resources.filter(
-      (resource) =>
-        resource.status === 'Low stock'
-    ).length;
-
-
-  const overdueCount =
-    issues.filter(
-      (issue) =>
-        issue.status === 'Overdue'
-    ).reduce(
-      (sum, issue) =>
-        sum + (issue.quantity || 1),
-      0
-    );
-
-
-  const attentionCount =
-    lowStockCount + overdueCount;
-
+  // Need attention = overdue quantity + low-stock quantity.
+  const overdueCount = dashboard.overdueIssues;
+  const attentionCount = overdueCount + lowStockCount;
 
   const weekAgo =
     Date.now() -
@@ -2794,7 +2836,21 @@ function History({
 }) {
 
   const [issues, setIssues] =
-    useState(getAllIssues());
+    useState<Issue[]>([]);
+
+
+  useEffect(() => {
+    const loadIssues = async () => {
+      try {
+        const data = await getIssuesApi();
+        setIssues(data.map(mapBackendIssue));
+      } catch (error) {
+        console.error('Failed to load history from backend:', error);
+      }
+    };
+
+    loadIssues();
+  }, []);
 
 
   const [search, setSearch] =
@@ -2875,27 +2931,29 @@ function History({
      RETURN RESOURCE
   ======================================================= */
 
-  const handleReturn = (
+  const handleReturn = async (
     issueId: string
   ) => {
 
-    const updatedIssues =
-      returnIssue(issueId);
+    try {
+      await returnIssueApi(issueId);
 
+      const [issueData, resourceData] = await Promise.all([
+        getIssuesApi(),
+        getResourcesApi(),
+      ]);
 
-    setIssues(
-      updatedIssues
-    );
+      setIssues(issueData.map(mapBackendIssue));
+      onResourcesChange(resourceData.map(mapBackendResource));
+    } catch (error) {
+      console.error('Failed to return resource:', error);
 
-
-    const updatedResources =
-      getAllResources();
-
-
-    onResourcesChange(
-      updatedResources
-    );
-
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'Failed to return resource'
+      );
+    }
   };
 
 
@@ -3137,129 +3195,432 @@ function History({
   );
 }
 
+const USERS_STORAGE_KEY = 'deeptech_users';
+
+function initializeUsers(): User[] {
+  const stored = localStorage.getItem(USERS_STORAGE_KEY);
+
+  if (stored) {
+    try {
+      return JSON.parse(stored) as User[];
+    } catch {
+      localStorage.removeItem(USERS_STORAGE_KEY);
+    }
+  }
+
+  const defaultUsers: User[] = [
+    {
+      id: 'USR-001',
+      name: 'Admin',
+      profession: 'Staff',
+      role: 'Admin',
+    },
+  ];
+
+  localStorage.setItem(
+    USERS_STORAGE_KEY,
+    JSON.stringify(defaultUsers)
+  );
+
+  return defaultUsers;
+}
+
+function saveUsers(users: User[]): void {
+  localStorage.setItem(
+    USERS_STORAGE_KEY,
+    JSON.stringify(users)
+  );
+}
+
 /* =========================================================
    PEOPLE
 ========================================================= */
 
 function People() {
-  const [users, setUsers] = useState<User[]>(initializeUsers());
+  const [users, setUsers] = useState<User[]>([]);
+
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const [profession, setProfession] =
     useState<Profession>('Student');
-  const [role, setRole] = useState<Role>('User');
 
-  const addPerson = () => {
-    if (!name.trim()) return;
+  const [loading, setLoading] = useState(true);
+  const [adding, setAdding] = useState(false);
 
-    const newUser: User = {
-      id: `USR-${String(users.length + 1).padStart(3, '0')}`,
-      name: name.trim(),
-      profession,
-      role,
-    };
+  const [error, setError] = useState('');
 
-    const updated = [...users, newUser];
+  // =========================================================
+  // LOAD USERS FROM BACKEND
+  // =========================================================
 
-    saveUsers(updated);
-    setUsers(updated);
-    setName('');
-    setProfession('Student');
-    setRole('User');
+  const loadUsers = async () => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const response = await fetch(
+        'http://localhost:8080/api/users',
+        {
+          headers: {
+            Authorization: `Basic ${sessionStorage.getItem(
+              'deeptech_api_credentials'
+            ) || ''}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load users (${response.status})`
+        );
+      }
+
+      const data = await response.json();
+
+      const mappedUsers: User[] = data.map(
+        (item: any) => ({
+          id: String(item.id),
+          name: item.name,
+          profession: item.profession,
+          role:
+            item.role === 'Admin'
+              ? 'Admin'
+              : 'User',
+        })
+      );
+
+      setUsers(mappedUsers);
+    } catch (err) {
+      console.error(
+        'Failed to load users:',
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to load users'
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  // =========================================================
+  // ADD MEMBER
+  // =========================================================
+
+  const addPerson = async () => {
+    if (!name.trim()) {
+      setError('Enter the member name');
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Enter the member email');
+      return;
+    }
+
+    if (!password.trim()) {
+      setError(
+        'Enter a temporary password'
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      setError(
+        'Temporary password must contain at least 6 characters'
+      );
+      return;
+    }
+
+    try {
+      setAdding(true);
+      setError('');
+
+      const credentials =
+        sessionStorage.getItem(
+          'deeptech_api_credentials'
+        );
+
+      const response = await fetch(
+        'http://localhost:8080/api/users',
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type':
+              'application/json',
+
+            Authorization:
+              `Basic ${credentials || ''}`,
+          },
+
+          body: JSON.stringify({
+            name: name.trim(),
+            email: email.trim(),
+            password: password,
+            profession,
+            role: 'User',
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        let message =
+          'Failed to create member';
+
+        try {
+          const errorData =
+            await response.json();
+
+          if (errorData?.error) {
+            message = errorData.error;
+          }
+        } catch {
+          // Keep default error message.
+        }
+
+        throw new Error(message);
+      }
+
+      const created =
+        await response.json();
+
+      const newUser: User = {
+        id: String(created.id),
+        name: created.name,
+        profession:
+          created.profession,
+        role: 'User',
+      };
+
+      setUsers((previous) => [
+        ...previous,
+        newUser,
+      ]);
+
+      // Reset form.
+      setName('');
+      setEmail('');
+      setPassword('');
+      setProfession('Student');
+
+      alert(
+        `Member account created successfully.\n\nUsername: ${created.email}\nTemporary password: ${password}\n\nGive these credentials to the member. They will be required to change the password after first login.`
+      );
+
+    } catch (err) {
+      console.error(
+        'Failed to create member:',
+        err
+      );
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to create member'
+      );
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
     <div className="people-page">
 
-      <section className="page-head">
-        <div>
-          <p className="eyebrow">PEOPLE & ACCESS</p>
+      {/* =====================================================
+          PAGE HEADER
+      ===================================================== */}
 
-          <h1>People</h1>
+      <section className="page-head">
+
+        <div>
+
+          <p className="eyebrow">
+            PEOPLE & ACCESS
+          </p>
+
+          <h1>
+            People
+          </h1>
 
           <p className="lede">
-            Manage users and access across the DeepTech innovation centre.
+            Manage club members and their
+            DeepTech resource access.
           </p>
+
         </div>
 
         <div className="page-head-icon">
           <Users size={24} />
         </div>
+
       </section>
 
+
+      {/* =====================================================
+          STATISTICS
+      ===================================================== */}
 
       <section className="people-stats">
 
         <div className="people-stat-card">
+
           <div className="stat-icon">
             <Users size={20} />
           </div>
 
           <div>
-            <span>Total people</span>
-            <strong>{users.length}</strong>
+
+            <span>
+              Total people
+            </span>
+
+            <strong>
+              {users.length}
+            </strong>
+
           </div>
+
         </div>
 
 
         <div className="people-stat-card">
+
           <div className="stat-icon">
             <GraduationCap size={20} />
           </div>
 
           <div>
-            <span>Students</span>
+
+            <span>
+              Students
+            </span>
+
             <strong>
-              {users.filter(
-                (u) => u.profession === 'Student'
-              ).length}
+              {
+                users.filter(
+                  (u) =>
+                    u.profession ===
+                    'Student'
+                ).length
+              }
             </strong>
+
           </div>
+
         </div>
 
 
         <div className="people-stat-card">
+
           <div className="stat-icon">
             <ShieldCheck size={20} />
           </div>
 
           <div>
-            <span>Admins</span>
+
+            <span>
+              Admins
+            </span>
+
             <strong>
-              {users.filter(
-                (u) => u.role === 'Admin'
-              ).length}
+              {
+                users.filter(
+                  (u) =>
+                    u.role ===
+                    'Admin'
+                ).length
+              }
             </strong>
+
           </div>
+
         </div>
 
       </section>
 
 
+      {/* =====================================================
+          ERROR
+      ===================================================== */}
+
+      {error && (
+
+        <div
+          style={{
+            marginBottom: '16px',
+            padding: '12px 14px',
+            borderRadius: '10px',
+            background: '#fff1f1',
+            border: '1px solid #ffd5d5',
+            color: '#b42318',
+            fontSize: '13px',
+            fontWeight: 600,
+          }}
+        >
+          {error}
+        </div>
+
+      )}
+
+
+      {/* =====================================================
+          MAIN CONTENT
+      ===================================================== */}
+
       <section className="people-grid">
 
-        {/* ADD PERSON */}
+        {/* ===================================================
+            ADD MEMBER
+        =================================================== */}
 
         <div className="panel people-form-card">
 
           <div className="panel-head">
+
             <div>
-              <p className="eyebrow">NEW USER</p>
-              <h2>Add person</h2>
+
+              <p className="eyebrow">
+                NEW MEMBER
+              </p>
+
+              <h2>
+                Add member
+              </h2>
+
             </div>
 
             <div className="panel-icon">
               <Plus size={19} />
             </div>
+
           </div>
 
 
           <p className="panel-description">
-            Add a person who can access innovation centre resources.
+            Create a club member account.
+            The member will be required to
+            change the temporary password
+            after their first login.
           </p>
 
 
+          {/* NAME */}
+
           <div className="form-field">
-            <label>Full name</label>
+
+            <label>
+              Full name
+            </label>
 
             <input
               value={name}
@@ -3268,11 +3629,68 @@ function People() {
               }
               placeholder="Enter full name"
             />
+
           </div>
 
 
+          {/* EMAIL */}
+
           <div className="form-field">
-            <label>Profession</label>
+
+            <label>
+              Email / Username
+            </label>
+
+            <input
+              type="email"
+              value={email}
+              onChange={(e) =>
+                setEmail(e.target.value)
+              }
+              placeholder="member@deeptech.com"
+            />
+
+          </div>
+
+
+          {/* TEMPORARY PASSWORD */}
+
+          <div className="form-field">
+
+            <label>
+              Temporary password
+            </label>
+
+            <input
+              type="password"
+              value={password}
+              onChange={(e) =>
+                setPassword(e.target.value)
+              }
+              placeholder="Minimum 6 characters"
+            />
+
+            <small
+              style={{
+                color: '#7b8195',
+                fontSize: '12px',
+                marginTop: '4px',
+              }}
+            >
+              The member must change this
+              password after first login.
+            </small>
+
+          </div>
+
+
+          {/* PROFESSION */}
+
+          <div className="form-field">
+
+            <label>
+              Profession
+            </label>
 
             <select
               value={profession}
@@ -3282,57 +3700,92 @@ function People() {
                 )
               }
             >
-              <option value="Student">Student</option>
-              <option value="Teacher">Teacher</option>
-              <option value="Staff">Staff</option>
-              <option value="Researcher">Researcher</option>
+
+              <option value="Student">
+                Student
+              </option>
+
+              <option value="Teacher">
+                Teacher
+              </option>
+
+              <option value="Staff">
+                Staff
+              </option>
+
+              <option value="Researcher">
+                Researcher
+              </option>
+
               <option value="Project Member">
                 Project Member
               </option>
-              <option value="Other">Other</option>
+
+              <option value="Other">
+                Other
+              </option>
+
             </select>
+
           </div>
 
 
-          <div className="form-field">
-            <label>Access role</label>
+          {/* ROLE IS ALWAYS USER */}
 
-            <select
-              value={role}
-              onChange={(e) =>
-                setRole(
-                  e.target.value as Role
-                )
-              }
-            >
-              <option value="User">User</option>
-              <option value="Admin">Admin</option>
-            </select>
+          <div className="form-field">
+
+            <label>
+              Access role
+            </label>
+
+            <input
+              value="User"
+              disabled
+            />
+
           </div>
 
 
           <button
             className="primary full people-add-button"
             onClick={addPerson}
-            disabled={!name.trim()}
+            disabled={
+              adding ||
+              !name.trim() ||
+              !email.trim() ||
+              !password.trim()
+            }
           >
+
             <Plus size={18} />
-            Add person
+
+            {adding
+              ? 'Creating account...'
+              : 'Create member account'}
+
           </button>
 
         </div>
 
 
-        {/* DIRECTORY */}
+        {/* ===================================================
+            DIRECTORY
+        =================================================== */}
 
         <div className="panel people-directory">
 
           <div className="panel-head">
 
             <div>
-              <p className="eyebrow">DIRECTORY</p>
 
-              <h2>People directory</h2>
+              <p className="eyebrow">
+                DIRECTORY
+              </p>
+
+              <h2>
+                People directory
+              </h2>
+
             </div>
 
             <span className="count-pill">
@@ -3345,58 +3798,100 @@ function People() {
           <div className="people-table">
 
             <div className="people-table-head">
-              <span>PERSON</span>
-              <span>PROFESSION</span>
-              <span>ROLE</span>
+
+              <span>
+                PERSON
+              </span>
+
+              <span>
+                PROFESSION
+              </span>
+
+              <span>
+                ROLE
+              </span>
+
             </div>
 
 
-            {users.map((user) => (
+            {loading ? (
 
               <div
-                className="people-table-row"
-                key={user.id}
+                style={{
+                  padding: '30px',
+                  textAlign: 'center',
+                  color: '#7b8195',
+                }}
               >
+                Loading people...
+              </div>
 
-                <div className="person-info">
+            ) : users.length === 0 ? (
 
-                  <div className="person-avatar">
-                    {user.name
-                      .charAt(0)
-                      .toUpperCase()}
+              <div
+                style={{
+                  padding: '30px',
+                  textAlign: 'center',
+                  color: '#7b8195',
+                }}
+              >
+                No members found.
+              </div>
+
+            ) : (
+
+              users.map((user) => (
+
+                <div
+                  className="people-table-row"
+                  key={user.id}
+                >
+
+                  <div className="person-info">
+
+                    <div className="person-avatar">
+
+                      {user.name
+                        .charAt(0)
+                        .toUpperCase()}
+
+                    </div>
+
+                    <div>
+
+                      <strong>
+                        {user.name}
+                      </strong>
+
+                      <small>
+                        {user.id}
+                      </small>
+
+                    </div>
+
                   </div>
 
-                  <div>
-                    <strong>
-                      {user.name}
-                    </strong>
 
-                    <small>
-                      {user.id}
-                    </small>
-                  </div>
+                  <span className="profession-pill">
+                    {user.profession}
+                  </span>
+
+
+                  <span
+                    className={
+                      user.role === 'Admin'
+                        ? 'role-pill admin'
+                        : 'role-pill user'
+                    }
+                  >
+                    {user.role}
+                  </span>
 
                 </div>
 
+              ))
 
-                <span className="profession-pill">
-                  {user.profession}
-                </span>
-
-
-                <span
-                  className={
-                    user.role === 'Admin'
-                      ? 'role-pill admin'
-                      : 'role-pill user'
-                  }
-                >
-                  {user.role}
-                </span>
-
-              </div>
-
-            ))}
+            )}
 
           </div>
 
@@ -4120,59 +4615,6 @@ function AddResource({
         location: location.trim() || 'Innovation Centre',
       });
       return;
-    }
-
-    const resource: Resource = {
-
-      id: `RES-${String(
-        Date.now()
-      ).slice(-6)}`,
-
-      name:
-        name.trim(),
-
-      category,
-
-      sub:
-        sub.trim() ||
-        (category === 'Hardware'
-          ? 'Hardware resource'
-          : 'Software resource'),
-
-      quantity:
-        Math.max(
-          1,
-          quantity
-        ),
-
-      status:
-        quantity <= 3
-          ? 'Low stock'
-          : 'Available',
-
-      tone:
-        category ===
-        'Hardware'
-          ? 'blue'
-          : 'purple',
-
-      location:
-        location.trim() ||
-        'Innovation Centre',
-
-    };
-
-
-    const updated =
-      addResource(
-        resource
-      );
-
-
-    if (onAdded) {
-      onAdded(
-        updated
-      );
     }
 
     handleClose();

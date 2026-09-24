@@ -4,8 +4,10 @@ import { Sparkles } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: {
+    id: string;
     name: string;
     email: string;
+    profession: string;
     role: 'Admin' | 'User';
   }) => void;
 }
@@ -15,35 +17,47 @@ export default function Login({ onLogin }: LoginProps) {
   const [email, setEmail] = useState('admin@deeptech.com');
   const [password, setPassword] = useState('123456');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRoleChange = (newRole: 'Admin' | 'User') => {
     setRole(newRole);
     setError('');
+
     if (newRole === 'Admin') {
       setEmail('admin@deeptech.com');
     } else {
-      setEmail('user@deeptech.com');
+      setEmail('');
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
     setError('');
+    setLoading(true);
 
-    const user = login(email, password);
+    try {
+      const user = await login(email, password);
 
-    if (!user) {
-      setError('Invalid email or password');
-      return;
+      if (!user) {
+        setError('Invalid email or password');
+        return;
+      }
+
+      if (user.role !== role) {
+        setError(
+          `This account is registered as ${user.role}. Please select the ${user.role} tab.`
+        );
+        return;
+      }
+
+      onLogin(user);
+    } catch (error) {
+      console.error('Login failed:', error);
+      setError('Unable to connect to the backend.');
+    } finally {
+      setLoading(false);
     }
-
-    if (user.role !== role) {
-      setError(`This account is registered as ${user.role}. Please select the ${user.role} tab.`);
-      return;
-    }
-
-    onLogin(user);
   };
 
   return (
@@ -67,20 +81,27 @@ export default function Login({ onLogin }: LoginProps) {
         </p>
 
         <div className="login-role-toggle">
+
           <button
             type="button"
-            className={`login-role-btn ${role === 'Admin' ? 'active' : ''}`}
+            className={`login-role-btn ${
+              role === 'Admin' ? 'active' : ''
+            }`}
             onClick={() => handleRoleChange('Admin')}
           >
             Admin
           </button>
+
           <button
             type="button"
-            className={`login-role-btn ${role === 'User' ? 'active' : ''}`}
+            className={`login-role-btn ${
+              role === 'User' ? 'active' : ''
+            }`}
             onClick={() => handleRoleChange('User')}
           >
             User
           </button>
+
         </div>
 
         <form onSubmit={handleLogin}>
@@ -118,25 +139,12 @@ export default function Login({ onLogin }: LoginProps) {
           <button
             type="submit"
             className="primary login-button"
+            disabled={loading}
           >
-            Sign in
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
 
         </form>
-
-        <div className="demo-credentials">
-
-          <p>Demo accounts</p>
-
-          <span>
-            Admin: admin@deeptech.com / 123456
-          </span>
-
-          <span>
-            User: user@deeptech.com / 123456
-          </span>
-
-        </div>
 
       </div>
 
