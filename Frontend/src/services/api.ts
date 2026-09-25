@@ -51,10 +51,22 @@ export function clearApiCredentials(): void {
   );
 }
 
-function getApiCredentials(): string | null {
+export function getApiCredentials(): string | null {
   return sessionStorage.getItem(
     'deeptech_api_credentials'
   );
+}
+
+export function getStoredPassword(): string {
+  try {
+    const creds = sessionStorage.getItem('deeptech_api_credentials');
+    if (!creds) return '';
+    const decoded = atob(creds);
+    const colonIndex = decoded.indexOf(':');
+    return colonIndex !== -1 ? decoded.slice(colonIndex + 1) : '';
+  } catch {
+    return '';
+  }
 }
 
 async function request<T>(

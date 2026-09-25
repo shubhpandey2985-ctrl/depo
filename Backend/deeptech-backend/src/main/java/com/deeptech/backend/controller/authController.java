@@ -40,16 +40,36 @@ public class authController {
             );
         }
 
+        String cleanEmail = request.email().trim();
         user foundUser =
                 userRepository
-                        .findByEmail(request.email())
+                        .findByEmail(cleanEmail)
                         .orElse(null);
 
-        if (foundUser == null
-                || !passwordEncoder.matches(
-                        request.password(),
-                        foundUser.getPassword())) {
+        if (foundUser == null) {
+            throw new RuntimeException(
+                    "Invalid email or password"
+            );
+        }
 
+        boolean matches = false;
+        try {
+            matches = passwordEncoder.matches(
+                    request.password(),
+                    foundUser.getPassword()
+            );
+        } catch (Exception ignored) {
+            // Stored password might not be in valid BCrypt format.
+        }
+
+        // If stored as plaintext, verify and upgrade to BCrypt immediately
+        if (!matches && request.password().equals(foundUser.getPassword())) {
+            foundUser.setPassword(passwordEncoder.encode(request.password()));
+            userRepository.save(foundUser);
+            matches = true;
+        }
+
+        if (!matches) {
             throw new RuntimeException(
                     "Invalid email or password"
             );

@@ -64,10 +64,17 @@ public class passwordController {
             );
         }
 
-        if (passwordEncoder.matches(
-                request.newPassword(),
-                currentUser.getPassword())) {
+        boolean isSamePassword = false;
+        try {
+            isSamePassword = passwordEncoder.matches(
+                    request.newPassword(),
+                    currentUser.getPassword()
+            );
+        } catch (Exception ignored) {
+            isSamePassword = request.newPassword().equals(currentUser.getPassword());
+        }
 
+        if (isSamePassword) {
             throw new RuntimeException(
                     "New password must be different from the current password"
             );

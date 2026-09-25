@@ -63,9 +63,11 @@ import {
   deleteResourceApi,
   getDashboardApi,
   getUsersApi,
+  deleteUserApi,
   getIssuesApi,
   createIssueApi,
   returnIssueApi,
+  getStoredPassword,
 } from '../services/api';
 
 
@@ -209,6 +211,8 @@ function App() {
   });
 
   const [profileOpen, setProfileOpen] = useState(false);
+
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const [editingResource, setEditingResource] =
     useState<Resource | null>(null);
@@ -426,15 +430,17 @@ if (!currentUser) {
 // FORCE PASSWORD CHANGE
 // =========================================================
 
+const effectivePassword = loginPassword || getStoredPassword();
+
 if (
   currentUser.mustChangePassword &&
-  loginPassword
+  effectivePassword
 ) {
 
   return (
     <ChangePassword
       email={currentUser.email}
-      currentPassword={loginPassword}
+      currentPassword={effectivePassword}
       onPasswordChanged={(newPassword) => {
 
         setLoginPassword(newPassword);
@@ -451,6 +457,33 @@ if (
           '',
           '#overview'
         );
+      }}
+    />
+  );
+
+}
+
+// =========================================================
+// VOLUNTARY PASSWORD CHANGE
+// =========================================================
+
+if (showChangePassword && effectivePassword) {
+
+  return (
+    <ChangePassword
+      email={currentUser.email}
+      currentPassword={effectivePassword}
+      isVoluntary={true}
+      onPasswordChanged={(newPassword) => {
+
+        setLoginPassword(newPassword);
+
+        setShowChangePassword(false);
+
+        setPage('Overview');
+      }}
+      onCancel={() => {
+        setShowChangePassword(false);
       }}
     />
   );
@@ -692,28 +725,25 @@ if (
   };
 
 
-  const saveEditedResource = async (data: {
-    name: string;
-    category: 'Hardware' | 'Software';
-    quantity: number;
-    location: string;
-  }) => {
+  const saveEditedResource = async (
+    _id: string,
+    data: Resource
+  ) => {
 
     if (!editingResource) return;
 
     const cleanName = data.name.trim();
-    const cleanLocation = data.location.trim();
+    const cleanLocation = (data.location || '').trim();
 
     if (!cleanName) {
       notify('Enter a resource name');
       return;
     }
 
-    if (
-      !Number.isInteger(data.quantity) ||
-      data.quantity <= 0
-    ) {
-      notify('Quantity must be at least 1');
+    const qty = Number(data.quantity);
+
+    if (!Number.isFinite(qty) || qty < 0) {
+      notify('Quantity must be 0 or more');
       return;
     }
 
@@ -724,10 +754,11 @@ if (
           name: cleanName,
           category: data.category,
           sub:
-            data.category === 'Hardware'
+            data.sub ||
+            (data.category === 'Hardware'
               ? 'Hardware resource'
-              : 'Software resource',
-          quantity: data.quantity,
+              : 'Software resource'),
+          quantity: qty,
           tone:
             data.category === 'Hardware'
               ? 'blue'
@@ -1070,6 +1101,28 @@ if (
 
                 </div>
 
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    setShowChangePassword(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    padding: '10px',
+                    border: 'none',
+                    borderRadius: '9px',
+                    background: 'transparent',
+                    color: '#424a64',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                  }}
+                >
+                  Change Password
+                </button>
 
                 <button
                   type="button"
@@ -3533,6 +3586,34 @@ function People() {
     }
   };
 
+  // =========================================================
+  // DELETE MEMBER
+  // =========================================================
+
+  const deletePerson = async (userId: string, userName: string) => {
+
+    if (!window.confirm(`Remove "${userName}" from the system? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await deleteUserApi(userId);
+
+      setUsers((previous) =>
+        previous.filter((u) => u.id !== userId)
+      );
+
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to remove member'
+      );
+    }
+  };
+
   return (
     <div className="people-page">
 
@@ -3911,6 +3992,10 @@ function People() {
                 ROLE
               </span>
 
+              <span style={{ textAlign: 'right' }}>
+                ACTION
+              </span>
+
             </div>
 
 
@@ -3986,6 +4071,18 @@ function People() {
                   >
                     {user.role}
                   </span>
+
+                  <div style={{ textAlign: 'right' }}>
+                    <button
+                      type="button"
+                      className="people-delete-btn"
+                      onClick={() => deletePerson(user.id, user.name)}
+                      title={`Remove ${user.name}`}
+                    >
+                      <Trash2 size={15} />
+                      <span>Remove</span>
+                    </button>
+                  </div>
 
                 </div>
 
@@ -4488,6 +4585,10 @@ function EditResource({
       ...resource,
     });
 
+  // Keep quantity as string while editing so numpad works freely
+  const [qtyStr, setQtyStr] =
+    useState(String(resource.quantity ?? 0));
+
 
   const update = (
     key: keyof Resource,
@@ -4508,10 +4609,16 @@ function EditResource({
       return;
     }
 
+    const parsedQty = Math.max(0, parseInt(qtyStr, 10) || 0);
+
+    const finalForm = {
+      ...form,
+      quantity: parsedQty,
+    };
 
     onSave(
-      form.id,
-      form
+      finalForm.id,
+      finalForm
     );
 
     onClose();
@@ -4615,17 +4722,9 @@ function EditResource({
               <input
                 type="number"
                 min="0"
-                value={form.quantity}
+                value={qtyStr}
                 onChange={(e) =>
-                  update(
-                    'quantity',
-                    Math.max(
-                      0,
-                      Number(
-                        e.target.value
-                      )
-                    )
-                  )
+                  setQtyStr(e.target.value)
                 }
               />
             </label>

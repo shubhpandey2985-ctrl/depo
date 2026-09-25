@@ -16,16 +16,25 @@ export default function Login({ onLogin }: LoginProps) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [showResetInfo, setShowResetInfo] = useState(false);
+
   const handleRoleChange = (newRole: 'Admin' | 'User') => {
     setRole(newRole);
     setError('');
 
-    if (newRole === 'Admin') {
-      setEmail('admin@deeptech.com');
-      setPassword('123456');
-    } else {
-      setEmail('user@deeptech.com');
-      setPassword('123456');
+    const isDemoEmail =
+      email === 'admin@deeptech.com' ||
+      email === 'user@deeptech.com' ||
+      email === '';
+
+    if (isDemoEmail) {
+      if (newRole === 'Admin') {
+        setEmail('admin@deeptech.com');
+        setPassword('123456');
+      } else {
+        setEmail('user@deeptech.com');
+        setPassword('123456');
+      }
     }
   };
 
@@ -35,21 +44,17 @@ export default function Login({ onLogin }: LoginProps) {
     setError('');
     setLoading(true);
 
+    const cleanEmail = email.trim();
+
     try {
-      const user = await login(email, password);
+      const user = await login(cleanEmail, password);
 
       if (!user) {
         setError('Invalid email or password');
         return;
       }
 
-      if (user.role !== role) {
-        setError(
-          `This account is registered as ${user.role}. Please select the ${user.role} tab.`
-        );
-        return;
-      }
-
+      setRole(user.role);
       onLogin(user, password);
     } catch (error) {
       console.error('Login failed:', error);

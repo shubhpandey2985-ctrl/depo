@@ -300,6 +300,19 @@
   gap: 18px;
 }
 
+.change-password-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.change-password-field label {
+  color: #424a64;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .login-card label {
   display: flex;
   flex-direction: column;
@@ -732,7 +745,7 @@
 
 .people-page .people-table-head {
   display: grid !important;
-  grid-template-columns: minmax(200px, 1.5fr) minmax(130px, 1fr) 90px !important;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 85px 85px !important;
   gap: 15px !important;
   padding: 11px 10px !important;
   border-bottom: 1px solid #e8eaf0 !important;
@@ -744,7 +757,7 @@
 
 .people-page .people-table-row {
   display: grid !important;
-  grid-template-columns: minmax(200px, 1.5fr) minmax(130px, 1fr) 90px !important;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 85px 85px !important;
   align-items: center !important;
   gap: 15px !important;
   padding: 14px 10px !important;
@@ -753,6 +766,29 @@
 
 .people-page .people-table-row:last-child {
   border-bottom: 0 !important;
+}
+
+.people-delete-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  padding: 5px 9px !important;
+  border: 1px solid #fee4e2 !important;
+  border-radius: 8px !important;
+  background: #fef3f2 !important;
+  color: #d92d20 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.people-delete-btn:hover {
+  background: #fee4e2 !important;
+  border-color: #fecdca !important;
+  color: #b42318 !important;
+  transform: translateY(-1px) !important;
 }
 
 

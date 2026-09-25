@@ -6,12 +6,16 @@ interface ChangePasswordProps {
   email: string;
   currentPassword: string;
   onPasswordChanged: (newPassword: string) => void;
+  isVoluntary?: boolean;
+  onCancel?: () => void;
 }
 
 export default function ChangePassword({
   email,
   currentPassword,
   onPasswordChanged,
+  isVoluntary,
+  onCancel,
 }: ChangePasswordProps) {
 
   const [newPassword, setNewPassword] =
@@ -144,15 +148,17 @@ export default function ChangePassword({
           <Sparkles />
         </div>
 
-        <h1>Change your password</h1>
+        <h1>{isVoluntary ? 'Change password' : 'Set new password'}</h1>
 
         <p className="login-subtitle">
-          Your account was created with a temporary password. Please create a new password before continuing.
+          {isVoluntary
+            ? 'Enter your new password below to update your account credentials.'
+            : 'Your account was created with a temporary password. Please create a new password before continuing.'}
         </p>
 
-        <form onSubmit={handleSubmit}>
-          <label>
-            New password
+        <form onSubmit={handleSubmit} className="change-password-form">
+          <div className="change-password-field">
+            <label htmlFor="new-password">New password</label>
             <input
               id="new-password"
               type="password"
@@ -166,10 +172,10 @@ export default function ChangePassword({
               disabled={loading}
               required
             />
-          </label>
+          </div>
 
-          <label>
-            Confirm new password
+          <div className="change-password-field">
+            <label htmlFor="confirm-password">Confirm new password</label>
             <input
               id="confirm-password"
               type="password"
@@ -183,7 +189,7 @@ export default function ChangePassword({
               disabled={loading}
               required
             />
-          </label>
+          </div>
 
           {error && (
             <p className="login-error">
@@ -191,15 +197,38 @@ export default function ChangePassword({
             </p>
           )}
 
-          <button
-            type="submit"
-            className="primary login-button"
-            disabled={loading}
-          >
-            {loading
-              ? 'Changing password...'
-              : 'Change password'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
+            <button
+              type="submit"
+              className="primary login-button"
+              disabled={loading}
+            >
+              {loading
+                ? 'Changing password...'
+                : 'Change password'}
+            </button>
+
+            {isVoluntary && onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '11px',
+                  background: 'transparent',
+                  border: '1px solid #dfe2eb',
+                  borderRadius: '11px',
+                  color: '#424a64',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
         </form>
       </div>
     </div>

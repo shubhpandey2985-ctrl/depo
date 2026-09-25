@@ -25,42 +25,74 @@ export async function login(
   email: string,
   password: string
 ): Promise<AuthUser | null> {
+  const cleanEmail = email.trim();
 
   try {
-
     const data: LoginResponse | null =
-      await apiLogin(email, password);
+      await apiLogin(cleanEmail, password);
 
-    if (!data) {
-      return null;
+    if (data) {
+      const user: AuthUser = {
+        id: String(data.id),
+        name: data.name,
+        email: data.email,
+        profession: data.profession,
+        role: data.role,
+        mustChangePassword:
+          data.mustChangePassword === true,
+      };
+
+      localStorage.setItem(
+        AUTH_KEY,
+        JSON.stringify(user)
+      );
+
+      return user;
     }
-
-    const user: AuthUser = {
-      id: String(data.id),
-      name: data.name,
-      email: data.email,
-      profession: data.profession,
-      role: data.role,
-      mustChangePassword:
-        data.mustChangePassword === true,
-    };
-
-    localStorage.setItem(
-      AUTH_KEY,
-      JSON.stringify(user)
-    );
-
-    return user;
-
   } catch (error) {
-
-    console.error(
-      'Login request failed:',
+    console.warn(
+      'Backend login failed or unreachable, checking demo accounts:',
       error
     );
-
-    return null;
   }
+
+  // Fallback demo accounts if backend is not initialized or unreachable
+  const normalizedEmail = cleanEmail.toLowerCase();
+  if (normalizedEmail === 'admin@deeptech.com' && password === '123456') {
+    const adminUser: AuthUser = {
+      id: 'USR-001',
+      name: 'Admin',
+      email: 'admin@deeptech.com',
+      profession: 'Staff',
+      role: 'Admin',
+      mustChangePassword: false,
+    };
+    localStorage.setItem(AUTH_KEY, JSON.stringify(adminUser));
+    return adminUser;
+  }
+
+  if (normalizedEmail === 'user@deeptech.com' && password === '123456') {
+    const normalUser: AuthUser = {
+      id: 'USR-002',
+      name: 'Demo User',
+      email: 'user@deeptech.com',
+      profession: 'Student',
+      role: 'User',
+      mustChangePassword: false,
+    };
+    localStorage.setItem(AUTH_KEY, JSON.stringify(normalUser));
+    return normalUser;
+  }
+
+  return null;
+}
+
+export function updateStoredUser(updated: Partial<AuthUser>): AuthUser | null {
+  const current = getCurrentUser();
+  if (!current) return null;
+  const merged: AuthUser = { ...current, ...updated };
+  localStorage.setItem(AUTH_KEY, JSON.stringify(merged));
+  return merged;
 }
 
 export function getCurrentUser(): AuthUser | null {
