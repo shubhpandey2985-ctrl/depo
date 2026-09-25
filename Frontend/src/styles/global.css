@@ -745,7 +745,7 @@
 
 .people-page .people-table-head {
   display: grid !important;
-  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 85px 85px !important;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 85px 140px !important;
   gap: 15px !important;
   padding: 11px 10px !important;
   border-bottom: 1px solid #e8eaf0 !important;
@@ -757,7 +757,7 @@
 
 .people-page .people-table-row {
   display: grid !important;
-  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 85px 85px !important;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(110px, 1fr) 85px 140px !important;
   align-items: center !important;
   gap: 15px !important;
   padding: 14px 10px !important;
@@ -766,6 +766,29 @@
 
 .people-page .people-table-row:last-child {
   border-bottom: 0 !important;
+}
+
+.people-edit-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  padding: 5px 9px !important;
+  border: 1px solid #e0e2ec !important;
+  border-radius: 8px !important;
+  background: #f8f9fc !important;
+  color: #3b4256 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.people-edit-btn:hover {
+  background: #eef1f8 !important;
+  border-color: #c7cbdb !important;
+  color: #17213d !important;
+  transform: translateY(-1px) !important;
 }
 
 .people-delete-btn {

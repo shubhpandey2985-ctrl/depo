@@ -47,9 +47,13 @@ public class userController {
     public user createUser(
             @RequestBody user newUser) {
 
-        // Accounts created through the People section
-        // are always normal club members.
-        newUser.setRole("User");
+        if (newUser.getRole() == null || newUser.getRole().isBlank()) {
+            newUser.setRole("User");
+        } else if (!"Admin".equalsIgnoreCase(newUser.getRole())) {
+            newUser.setRole("User");
+        } else {
+            newUser.setRole("Admin");
+        }
 
         return userService.createUser(newUser);
     }

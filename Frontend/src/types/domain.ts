@@ -32,6 +32,7 @@ export interface Resource {
 export interface User {
   id: string;
   name: string;
+  email?: string;
   profession: Profession;
   role: Role;
 }

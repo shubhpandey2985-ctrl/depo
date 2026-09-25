@@ -63,6 +63,7 @@ import {
   deleteResourceApi,
   getDashboardApi,
   getUsersApi,
+  updateUserApi,
   deleteUserApi,
   getIssuesApi,
   createIssueApi,
@@ -3399,6 +3400,17 @@ function People() {
   const [profession, setProfession] =
     useState<Profession>('Student');
 
+  const [memberRole, setMemberRole] =
+    useState<Role>('User');
+
+  const [editingUser, setEditingUser] =
+    useState<User | null>(null);
+
+  const [editName, setEditName] = useState('');
+  const [editProfession, setEditProfession] = useState<Profession>('Student');
+  const [editRole, setEditRole] = useState<Role>('User');
+  const [updating, setUpdating] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
 
@@ -3436,6 +3448,7 @@ function People() {
         (item: any) => ({
           id: String(item.id),
           name: item.name,
+          email: item.email,
           profession: item.profession,
           role:
             item.role === 'Admin'
@@ -3521,7 +3534,7 @@ function People() {
             email: email.trim(),
             password: password,
             profession,
-            role: 'User',
+            role: memberRole,
           }),
         }
       );
@@ -3550,9 +3563,10 @@ function People() {
       const newUser: User = {
         id: String(created.id),
         name: created.name,
+        email: created.email,
         profession:
           created.profession,
-        role: 'User',
+        role: created.role === 'Admin' ? 'Admin' : 'User',
       };
 
       setUsers((previous) => [
@@ -3565,6 +3579,7 @@ function People() {
       setEmail('');
       setPassword('');
       setProfession('Student');
+      setMemberRole('User');
 
       alert(
         `Member account created successfully.\n\nUsername: ${created.email}\nTemporary password: ${password}\n\nGive these credentials to the member. They will be required to change the password after first login.`
@@ -3611,6 +3626,67 @@ function People() {
           ? err.message
           : 'Failed to remove member'
       );
+    }
+  };
+
+  // =========================================================
+  // EDIT MEMBER
+  // =========================================================
+
+  const startEditPerson = (user: User) => {
+    setError('');
+    setEditingUser(user);
+    setEditName(user.name);
+    setEditProfession(user.profession);
+    setEditRole(user.role);
+  };
+
+  const cancelEditPerson = () => {
+    setEditingUser(null);
+    setEditName('');
+    setError('');
+  };
+
+  const saveUpdatedPerson = async () => {
+    if (!editingUser) return;
+
+    if (!editName.trim()) {
+      setError('Member name cannot be empty');
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      setError('');
+
+      const updated = await updateUserApi(editingUser.id, {
+        name: editName.trim(),
+        email: editingUser.email || (editingUser as any).id,
+        profession: editProfession,
+        role: editRole,
+      });
+
+      setUsers((previous) =>
+        previous.map((u) =>
+          u.id === editingUser.id
+            ? {
+                ...u,
+                name: updated.name,
+                profession: updated.profession,
+                role: updated.role === 'Admin' ? 'Admin' : 'User',
+              }
+            : u
+        )
+      );
+
+      setEditingUser(null);
+    } catch (err) {
+      console.error('Failed to update member:', err);
+      setError(
+        err instanceof Error ? err.message : 'Failed to update member'
+      );
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -3911,7 +3987,7 @@ function People() {
           </div>
 
 
-          {/* ROLE IS ALWAYS USER */}
+          {/* ACCESS ROLE DROPDOWN */}
 
           <div className="form-field">
 
@@ -3919,10 +3995,22 @@ function People() {
               Access role
             </label>
 
-            <input
-              value="User"
-              disabled
-            />
+            <select
+              value={memberRole}
+              onChange={(e) =>
+                setMemberRole(
+                  e.target.value as Role
+                )
+              }
+            >
+              <option value="User">
+                User
+              </option>
+
+              <option value="Admin">
+                Admin
+              </option>
+            </select>
 
           </div>
 
@@ -4072,14 +4160,24 @@ function People() {
                     {user.role}
                   </span>
 
-                  <div style={{ textAlign: 'right' }}>
+                  <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className="people-edit-btn"
+                      onClick={() => startEditPerson(user)}
+                      title={`Edit ${user.name}`}
+                    >
+                      <Edit3 size={14} />
+                      <span>Edit</span>
+                    </button>
+
                     <button
                       type="button"
                       className="people-delete-btn"
                       onClick={() => deletePerson(user.id, user.name)}
                       title={`Remove ${user.name}`}
                     >
-                      <Trash2 size={15} />
+                      <Trash2 size={14} />
                       <span>Remove</span>
                     </button>
                   </div>
@@ -4095,6 +4193,82 @@ function People() {
         </div>
 
       </section>
+
+      {/* ===================================================
+          EDIT MEMBER MODAL / DRAWER
+      =================================================== */}
+      {editingUser && (
+        <div className="drawer-shade" onClick={cancelEditPerson}>
+          <aside className="detail" onClick={(e) => e.stopPropagation()}>
+            <button className="close" onClick={cancelEditPerson}>
+              <X />
+            </button>
+
+            <p className="eyebrow">EDIT MEMBER</p>
+            <h2>Update member</h2>
+            <p className="drawer-subtitle">
+              Modify details and access level for {editingUser.name}.
+            </p>
+
+            <form
+              className="drawer-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveUpdatedPerson();
+              }}
+            >
+              <label>
+                <span>Full name</span>
+                <input
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Enter full name"
+                  required
+                />
+              </label>
+
+              <label>
+                <span>Profession</span>
+                <select
+                  value={editProfession}
+                  onChange={(e) =>
+                    setEditProfession(e.target.value as Profession)
+                  }
+                >
+                  <option value="Student">Student</option>
+                  <option value="Teacher">Teacher</option>
+                  <option value="Staff">Staff</option>
+                  <option value="Researcher">Researcher</option>
+                  <option value="Project Member">Project Member</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Access role</span>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value as Role)}
+                >
+                  <option value="User">User</option>
+                  <option value="Admin">Admin</option>
+                </select>
+              </label>
+
+              <div className="drawer-actions">
+                <button
+                  type="submit"
+                  className="primary full"
+                  disabled={updating || !editName.trim()}
+                >
+                  {updating ? 'Saving changes...' : 'Save changes'}
+                  <Check />
+                </button>
+              </div>
+            </form>
+          </aside>
+        </div>
+      )}
 
     </div>
   );
