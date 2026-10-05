@@ -33,33 +33,43 @@ function getStoredUser(): StoredAuthUser | null {
  * We will replace this with a proper token/session approach later.
  */
 
+const API_CREDENTIALS_KEY = 'deeptech_api_credentials';
+
 export function saveApiCredentials(
   email: string,
   password: string
 ): void {
   const credentials = btoa(`${email}:${password}`);
 
+  localStorage.setItem(
+    API_CREDENTIALS_KEY,
+    credentials
+  );
   sessionStorage.setItem(
-    'deeptech_api_credentials',
+    API_CREDENTIALS_KEY,
     credentials
   );
 }
 
 export function clearApiCredentials(): void {
+  localStorage.removeItem(
+    API_CREDENTIALS_KEY
+  );
   sessionStorage.removeItem(
-    'deeptech_api_credentials'
+    API_CREDENTIALS_KEY
   );
 }
 
 export function getApiCredentials(): string | null {
-  return sessionStorage.getItem(
-    'deeptech_api_credentials'
+  return (
+    localStorage.getItem(API_CREDENTIALS_KEY) ||
+    sessionStorage.getItem(API_CREDENTIALS_KEY)
   );
 }
 
 export function getStoredPassword(): string {
   try {
-    const creds = sessionStorage.getItem('deeptech_api_credentials');
+    const creds = getApiCredentials();
     if (!creds) return '';
     const decoded = atob(creds);
     const colonIndex = decoded.indexOf(':');
@@ -102,6 +112,12 @@ async function request<T>(
   );
 
   if (!response.ok) {
+
+    if (response.status === 401) {
+      clearApiCredentials();
+      localStorage.removeItem(AUTH_USER_KEY);
+      window.dispatchEvent(new Event('deeptech_unauthorized'));
+    }
 
     let message =
       `Request failed with status ${response.status}`;

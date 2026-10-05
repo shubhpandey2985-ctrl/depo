@@ -69,6 +69,7 @@ import {
   createIssueApi,
   returnIssueApi,
   getStoredPassword,
+  getApiCredentials,
 } from '../services/api';
 
 
@@ -185,7 +186,15 @@ function mapBackendResource(item: any): Resource {
 }
 
 function App() {
-  const [currentUser, setCurrentUser] = useState(() => getCurrentUser());
+  const [currentUser, setCurrentUser] = useState(() => {
+    const user = getCurrentUser();
+    const creds = getApiCredentials();
+    if (user && !creds) {
+      logout();
+      return null;
+    }
+    return user;
+  });
 
   const [role, setRole] = useState<'Admin' | 'User'>(
     currentUser?.role || 'User'
@@ -296,6 +305,19 @@ function App() {
         'popstate',
         handlePopState
       );
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setCurrentUser(null);
+      setProfileOpen(false);
+      setPage('Overview');
+    };
+
+    window.addEventListener('deeptech_unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('deeptech_unauthorized', handleUnauthorized);
     };
   }, []);
 
@@ -3425,13 +3447,13 @@ function People() {
       setLoading(true);
       setError('');
 
+      const credentials = getApiCredentials();
+
       const response = await fetch(
         'http://localhost:8080/api/users',
         {
           headers: {
-            Authorization: `Basic ${sessionStorage.getItem(
-              'deeptech_api_credentials'
-            ) || ''}`,
+            Authorization: `Basic ${credentials || ''}`,
           },
         }
       );
@@ -3511,10 +3533,7 @@ function People() {
       setAdding(true);
       setError('');
 
-      const credentials =
-        sessionStorage.getItem(
-          'deeptech_api_credentials'
-        );
+      const credentials = getApiCredentials();
 
       const response = await fetch(
         'http://localhost:8080/api/users',

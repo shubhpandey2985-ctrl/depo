@@ -1,5 +1,5 @@
 import type { Role } from '../types/domain';
-import { apiLogin, clearApiCredentials } from './api';
+import { apiLogin, clearApiCredentials, saveApiCredentials } from './api';
 
 const AUTH_KEY = 'deeptech_auth';
 
@@ -67,6 +67,7 @@ export async function login(
       role: 'Admin',
       mustChangePassword: false,
     };
+    saveApiCredentials('admin@deeptech.com', '123456');
     localStorage.setItem(AUTH_KEY, JSON.stringify(adminUser));
     return adminUser;
   }
@@ -80,6 +81,7 @@ export async function login(
       role: 'User',
       mustChangePassword: false,
     };
+    saveApiCredentials('user@deeptech.com', '123456');
     localStorage.setItem(AUTH_KEY, JSON.stringify(normalUser));
     return normalUser;
   }
